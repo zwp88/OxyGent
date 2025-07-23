@@ -42,17 +42,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
-
-async def main():
-    async with MAS(oxy_space=oxy_space) as mas:
-        messages = [
-            {"role": "system", "content": "You are a helpful assistant"},
-            {"role": "user", "content": "hello"},
-        ]
-        result = await mas.call(callee="master_agent", arguments={"messages": messages})
-        print(result)
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
