@@ -66,7 +66,7 @@ oxy_space = [
 async def main():
     async with MAS(oxy_space=oxy_space) as mas:
         await mas.start_web_service(
-            first_query="Get what time it is and save in `log.txt` under `/local_file`"
+            first_query="This is an example for rag. Please modify it according to the specific needs",
         )
 
 
@@ -74,7 +74,7 @@ async def test():
     async with MAS(oxy_space=oxy_space) as mas:
         out = await mas.chat_with_agent(
             payload={
-                "query": "Get what time it is and save in `log.txt` under `/local_file`"
+                "query": "This is an example for rag. Please modify it according to the specific needs"
             }
         )
         print(out)
