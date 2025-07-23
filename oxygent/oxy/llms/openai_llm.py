@@ -38,7 +38,18 @@ class OpenAILLM(RemoteLLM):
             OxyResponse: The response containing the model's output with COMPLETED state.
         """
         # Construct payload for OpenAI API request
-        llm_config = Config.get_llm_config()
+        llm_config = {
+            k: v
+            for k, v in Config.get_llm_config().items()
+            if k
+            not in {
+                "cls",
+                "base_url",
+                "api_key",
+                "name",
+                "model_name",
+            }
+        }
         payload = {
             "messages": await self._get_messages(oxy_request),
             "model": self.model_name,
