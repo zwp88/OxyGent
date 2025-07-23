@@ -91,14 +91,25 @@ OxyGent最新版本 (July 9, 2025) 在[GAIA](https://huggingface.co/spaces/gaia-
 
 ## 5. 快速开始
 ---
-+ 创建运行环境
++ 创建运行环境（conda）
 ```bash
    conda create -n oxy_env python==3.10
    conda activate oxy_env
 ```
-+ 下载发行包
+或者（uv）
 ```bash
-    pip install oxygent
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+   uv python install 3.10 
+   uv venv .venv --python 3.10
+   source .venv/bin/activate
+```
++ 下载发行包（conda）
+```bash
+   pip install oxygent
+```
+或者（uv）
+```bash
+   uv pip install oxygent
 ```
 + 或在开发环境下：
 
@@ -107,7 +118,7 @@ OxyGent最新版本 (July 9, 2025) 在[GAIA](https://huggingface.co/spaces/gaia-
    + 下载依赖:
 
    ```bash
-      pip install -r requirements.txt
+      pip install -r requirements.txt # or in uv
       brew install coreutils # maybe essential
    ```
 

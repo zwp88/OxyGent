@@ -96,14 +96,25 @@ This isn't just another framework - it's the foundation for next-gen AI infrastr
 
 ## 5. Quick Start
 --- 
-+ Create and activate a python environment
++ Create and activate a python environment (conda)
 ```bash
    conda create -n oxy_env python==3.10
    conda activate oxy_env
 ```
-+ Install the required python package
+or (uv)
 ```bash
-    pip install oxygent
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+   uv python install 3.10 
+   uv venv .venv --python 3.10
+   source .venv/bin/activate
+```
++ Install the required python package (conda)
+```bash
+   pip install oxygent
+```
+or (uv)
+```bash
+   uv pip install oxygent
 ```
 + Or set develop environment:
 
@@ -112,7 +123,7 @@ This isn't just another framework - it's the foundation for next-gen AI infrastr
    + Download our requirements:
 
    ```bash
-      pip install -r requirements.txt
+      pip install -r requirements.txt # or in uv
       brew install coreutils # maybe essential
    ```
 
