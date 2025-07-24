@@ -40,6 +40,12 @@ class HttpLLM(RemoteLLM):
         """
         use_openai = self.api_key is not None
         url = self.base_url.rstrip("/")
+        if use_openai:
+            if not url.endswith("/chat/completions"):
+                url = f"{url}/chat/completions"
+        else:
+            if not url.endswith("/api/chat"): # only support ollama
+                url = f"{url}/api/chat"
         headers = {"Content-Type": "application/json"}
         if use_openai:
             headers["Authorization"] = f"Bearer {self.api_key}"
