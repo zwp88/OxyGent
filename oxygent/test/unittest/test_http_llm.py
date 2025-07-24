@@ -34,7 +34,7 @@ def llm(monkeypatch):
         name="http_llm",
         desc="UT HTTP LLM",
         api_key="sk-123",
-        base_url="https://api.fake.com/v1/chat",
+        base_url="https://api.fake.com/v1/chat/completions",
         model_name="gpt-ut",
         llm_params={"temperature": 0.3},
     )
@@ -95,7 +95,7 @@ async def test_execute_success(monkeypatch, llm, oxy_request):
     assert resp.state is OxyState.COMPLETED
     assert resp.output == "Hi there!"
 
-    assert captured["url"] == "https://api.fake.com/v1/chat"
+    assert captured["url"] == "https://api.fake.com/v1/chat/completions"
     assert captured["headers"]["Authorization"] == "Bearer sk-123"
 
     pay = captured["payload"]
