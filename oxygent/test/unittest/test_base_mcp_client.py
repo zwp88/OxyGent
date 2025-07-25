@@ -1,4 +1,6 @@
-"""Unit tests for BaseMCPClient."""
+"""
+Unit tests for BaseMCPClient
+"""
 
 import types
 import pytest
@@ -43,7 +45,9 @@ class MockSession:
             return_value=[("tools", [MockMCPToolInfo("dummy_tool")])]
         )
         self.call_tool = AsyncMock(
-            return_value=types.SimpleNamespace(content=[MockContent("hello-world")])
+            return_value=types.SimpleNamespace(
+                content=[MockContent("hello-world")]
+            )
         )
 
 

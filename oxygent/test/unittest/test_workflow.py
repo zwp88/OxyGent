@@ -1,4 +1,6 @@
-"""Unit tests for Workflow."""
+"""
+Unit tests for Workflow
+"""
 
 import pytest
 
@@ -7,9 +9,9 @@ from oxygent.schemas import OxyRequest, OxyResponse, OxyState
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# ❶ Dummy workflow
+# ❶ Dummy workflow 
 # ──────────────────────────────────────────────────────────────────────────────
-async def echo_workflow(req: OxyRequest) -> str:
+async def echo_workflow(req: OxyRequest) -> str:  
     return f"echo({req.arguments.get('query')})"
 
 
@@ -46,7 +48,6 @@ async def test_execute_success(workflow, oxy_request):
     assert resp.state is OxyState.COMPLETED
     assert resp.output == "echo(hello)"
     assert resp.oxy_request.call_stack[-1] == "wf"
-
 
 # TODO: add error
 # @pytest.mark.asyncio

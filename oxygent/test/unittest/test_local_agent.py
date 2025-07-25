@@ -1,4 +1,7 @@
-"""Unit tests for LocalAgent (tool & memory management) pytest – pytest-asyncio."""
+"""
+Unit tests for LocalAgent (tool & memory management)
+pytest – pytest-asyncio
+"""
 
 import copy
 import pytest
@@ -33,7 +36,7 @@ async def dummy_exec() -> str:
 class DummyFunctionTool(FunctionTool):
     name: str = "dummy_tool"
     desc: str = "Unit-Test FunctionTool"
-    is_multimodal_supported: bool = False
+    is_multimodal_supported: bool = False  
 
     func_process = staticmethod(dummy_exec)
 
@@ -43,9 +46,9 @@ class MockLLMTool(BaseTool):
     name: str = "mock_llm"
     desc: str = "Stub LLM"
     category: str = "llm"
-    is_multimodal_supported: bool = False
+    is_multimodal_supported: bool = False  
 
-    async def _execute(self, oxy_request: OxyRequest) -> OxyResponse:
+    async def _execute(self, oxy_request: OxyRequest) -> OxyResponse:  
         return OxyResponse(
             state=OxyState.COMPLETED, output="llm-output", oxy_request=oxy_request
         )

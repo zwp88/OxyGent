@@ -1,4 +1,6 @@
-"""Unit tests for Message & Memory classes."""
+"""
+Unit tests for Message & Memory classes
+"""
 
 import pytest
 from oxygent.schemas.memory import Message, Memory, Function, ToolCall
@@ -20,7 +22,7 @@ def test_message_factory_shortcuts():
 
 
 def test_message_add_overloads():
-    """Message + Message / list + Message."""
+    """Message + Message / list + Message"""
     m1 = Message.user_message("A")
     m2 = Message.assistant_message("B")
 
@@ -29,7 +31,7 @@ def test_message_add_overloads():
     assert [m2] + m1 == [m2, m1]
 
     with pytest.raises(TypeError):
-        _ = m1 + 1
+        _ = m1 + 1  
 
 
 def test_message_to_dict_and_tool_calls():

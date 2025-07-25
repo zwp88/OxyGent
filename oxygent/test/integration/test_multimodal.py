@@ -5,7 +5,6 @@ from examples.advanced.multimodal_demo import main as multimodal_test
 
 # Skip the test if multimodal demo is not available
 
-
 @pytest.mark.asyncio
 async def test_multimodal_demo(capfd):
     await multimodal_test()

@@ -1,4 +1,6 @@
-"""Unit tests for ParallelAgent."""
+"""
+Unit tests for ParallelAgent
+"""
 
 import pytest
 from unittest.mock import AsyncMock
@@ -10,7 +12,7 @@ from oxygent.schemas import OxyRequest, OxyResponse, OxyState
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# ❶ Dummy MAS
+# ❶ Dummy MAS 
 # ──────────────────────────────────────────────────────────────────────────────
 class DummyMAS:
     def __init__(self):
@@ -55,9 +57,7 @@ class MockLLMTool(BaseTool):
     category: str = "llm"
     is_multimodal_supported: bool = False
 
-    async def _execute(
-        self, oxy_request: OxyRequest
-    ) -> OxyResponse:  # pragma: no cover
+    async def _execute(self, oxy_request: OxyRequest) -> OxyResponse:  # pragma: no cover
         return OxyResponse(
             state=OxyState.COMPLETED, output="stub-llm", oxy_request=oxy_request
         )
@@ -68,7 +68,7 @@ class MockLLMTool(BaseTool):
 # ──────────────────────────────────────────────────────────────────────────────
 @pytest.fixture
 def patched_config(monkeypatch):
-    """修补 LocalAgent 依赖的 Config."""
+    """修补 LocalAgent 依赖的 Config"""
     monkeypatch.setattr(
         "oxygent.oxy.agents.local_agent.Config.get_agent_llm_model",
         lambda: "mock_llm",
@@ -131,16 +131,12 @@ def oxy_request(monkeypatch, mas_env):
                 state=OxyState.COMPLETED, output="result_b", oxy_request=self
             )
         if callee == "mock_llm":
-            outputs = [
-                msg["content"] for msg in arguments["messages"] if msg["role"] == "user"
-            ]
+            outputs = [msg["content"] for msg in arguments["messages"] if msg["role"] == "user"]
             summary = f"summary({'+'.join(outputs)})"
             return OxyResponse(
                 state=OxyState.COMPLETED, output=summary, oxy_request=self
             )
-        return OxyResponse(
-            state=OxyState.FAILED, output="unknown callee", oxy_request=self
-        )
+        return OxyResponse(state=OxyState.FAILED, output="unknown callee", oxy_request=self)
 
     monkeypatch.setattr("oxygent.schemas.OxyRequest.call", _fake_call, raising=True)
     return req

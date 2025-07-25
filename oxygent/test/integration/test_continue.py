@@ -11,8 +11,8 @@ from examples.advanced.continue_exec_demo import main
 async def test_continue_exec_demo_integration(capfd):
     """Integration test for continue_exec_demo.
 
-    This test runs the continue_exec_demo main function and verifies that the output
-    contains valid assistant response with expected structural fields.
+    This test runs the continue_exec_demo main function and verifies that
+    the output contains valid assistant response with expected structural fields.
     """
 
     # Run the demo main

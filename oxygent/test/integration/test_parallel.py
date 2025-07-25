@@ -37,26 +37,18 @@ async def test_parallel_demo_integration(capfd):
 
     # 1. Check for comprehensive summary keywords
     summary_keywords = ["comprehensive", "summary", "parallel"]
-    assert any(kw in result.lower() for kw in summary_keywords), (
-        "Output lacks required summary keywords"
-    )
+    assert any(kw in result.lower() for kw in summary_keywords), "Output lacks required summary keywords"
 
     # 2. Check format contains structured content (e.g. numbered or markdown sections)
     structured_patterns = [r"1\.", r"###", r"####", r"\*\*"]
-    assert any(re.search(pat, result) for pat in structured_patterns), (
-        "Output lacks structured detailed content"
-    )
+    assert any(re.search(pat, result) for pat in structured_patterns), "Output lacks structured detailed content"
 
     # 3. Check all expert agent sections are included
     expert_keywords = ["technical", "business", "risk", "legal"]
     for expert in expert_keywords:
-        assert re.search(expert, result, re.IGNORECASE), (
-            f"Output missing {expert} section"
-        )
+        assert re.search(expert, result, re.IGNORECASE), f"Output missing {expert} section"
 
     # 4. Ensure no 'sorry', 'error', or apology-like fallback statements
     forbidden_patterns = [r"sorry", r"error", r"apolog"]
     for pat in forbidden_patterns:
-        assert not re.search(pat, result, re.IGNORECASE), (
-            f"Output contains forbidden pattern: {pat}"
-        )
+        assert not re.search(pat, result, re.IGNORECASE), f"Output contains forbidden pattern: {pat}"

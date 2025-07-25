@@ -1,4 +1,6 @@
-"""Unit tests for MCPTool."""
+"""
+Unit tests for MCPTool
+"""
 
 import pytest
 from unittest.mock import AsyncMock
@@ -24,7 +26,7 @@ class DummyMCPClient:
 @pytest.fixture
 def mcp_client():
     cli = DummyMCPClient()
-    cli._execute.side_effect = cli.execute_ok
+    cli._execute.side_effect = cli.execute_ok        
     return cli
 
 

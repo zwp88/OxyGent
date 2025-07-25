@@ -189,23 +189,23 @@ class LocalEs(BaseEs):
         return [{"_id": k, "_source": v} for k, v in data.items()]
 
     def _filter_docs(self, docs: list[dict[str, Any]], query: dict[str, Any]):
-        """Multi-condition Query."""
+        """Multi-condition Query"""
         if not query:
             return docs
-
+        
         if "term" in query:
             k, v = next(iter(query["term"].items()))
             if k == "_id":
                 return [d for d in docs if d["_id"] == v]
             return [d for d in docs if d["_source"].get(k) == v]
-
+        
         if "terms" in query:
             k, vlist = next(iter(query["terms"].items()))
             return [d for d in docs if d["_source"].get(k) in vlist]
-
+        
         if "bool" in query:
             bool_query = query["bool"]
-
+            
             if "must" in bool_query:
                 musts = bool_query["must"]
                 filtered_docs = []
@@ -218,7 +218,7 @@ class LocalEs(BaseEs):
                     if match_all:
                         filtered_docs.append(doc)
                 return filtered_docs
-
+            
             if "should" in bool_query:
                 should_conditions = bool_query["should"]
                 filtered_docs = []
@@ -228,7 +228,7 @@ class LocalEs(BaseEs):
                             filtered_docs.append(doc)
                             break
                 return filtered_docs
-
+            
             if "must_not" in bool_query:
                 must_not_conditions = bool_query["must_not"]
                 filtered_docs = []
@@ -241,48 +241,44 @@ class LocalEs(BaseEs):
                     if not exclude:
                         filtered_docs.append(doc)
                 return filtered_docs
-
+        
         return docs
-
+    
     async def find_node_safe(es, index_name: str, trace_id: str, node_id: str):
         result = await es.get_by_node_id(index_name, node_id)
         if result:
             if result["_source"].get("trace_id") == trace_id:
                 return result
             else:
-                logger.warning(
-                    f"Node {node_id} found but trace_id mismatch: expected {trace_id}, got {result['_source'].get('trace_id')}"
-                )
-
+                logger.warning(f"Node {node_id} found but trace_id mismatch: expected {trace_id}, got {result['_source'].get('trace_id')}")
+        
         compound_query = {
             "query": {
                 "bool": {
                     "must": [
                         {"term": {"trace_id": trace_id}},
-                        {"term": {"node_id": node_id}},
+                        {"term": {"node_id": node_id}}
                     ]
                 }
             },
-            "size": 1,
+            "size": 1
         }
-
+        
         search_result = await es.search(index_name, compound_query)
         hits = search_result.get("hits", {}).get("hits", [])
         return hits[0] if hits else None
-
-    def _match_single_condition(
-        self, doc: dict[str, Any], condition: dict[str, Any]
-    ) -> bool:
+    
+    def _match_single_condition(self, doc: dict[str, Any], condition: dict[str, Any]) -> bool:
         if "term" in condition:
             k, v = next(iter(condition["term"].items()))
             if k == "_id":
                 return doc["_id"] == v
             return doc["_source"].get(k) == v
-
+        
         if "terms" in condition:
             k, vlist = next(iter(condition["terms"].items()))
             return doc["_source"].get(k) in vlist
-
+        
         return False
 
     @staticmethod
@@ -292,46 +288,39 @@ class LocalEs(BaseEs):
                 reverse = order.get("order", "asc") == "desc"
                 docs.sort(key=lambda d: d["_source"].get(field), reverse=reverse)
         return docs
-
-    async def get_by_node_id(
-        self, index_name: str, node_id: str
-    ) -> Optional[dict[str, Any]]:
+    
+    async def get_by_node_id(self, index_name: str, node_id: str) -> Optional[dict[str, Any]]:
         data = await self._read_json_safe(self._index_path(index_name)) or {}
-
+        
         for doc_id, doc_content in data.items():
             if isinstance(doc_content, dict) and doc_content.get("node_id") == node_id:
                 return {"_id": doc_id, "_source": doc_content}
-
+        
         return None
 
-    async def update_by_node_id(
-        self, index_name: str, node_id: str, updates: dict[str, Any]
-    ) -> dict[str, str]:
+    async def update_by_node_id(self, index_name: str, node_id: str, updates: dict[str, Any]) -> dict[str, str]:
         data_path = self._index_path(index_name)
         backup_path = f"{data_path}.bak"
-
+        
         lock = self._locks.setdefault(index_name, asyncio.Lock())
         async with lock:
             data = await self._read_json_safe(data_path) or {}
-
+            
             target_doc_id = None
             for doc_id, doc_content in data.items():
-                if (
-                    isinstance(doc_content, dict)
-                    and doc_content.get("node_id") == node_id
-                ):
+                if isinstance(doc_content, dict) and doc_content.get("node_id") == node_id:
                     target_doc_id = doc_id
                     break
-
+            
             if target_doc_id is None:
                 return {"_id": "", "result": "not_found"}
-
+            
             data[target_doc_id].update(updates)
-
+            
             if await aiofiles.os.path.exists(data_path):
                 await aiofiles.os.replace(data_path, backup_path)
             await self._write_json_atomic(data_path, data)
-
+            
             return {"_id": target_doc_id, "result": "updated"}
 
     async def close(self) -> bool:  # noqa: D401 – nothing to clean

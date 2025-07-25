@@ -35,9 +35,7 @@ async def test_multi_level_demo_integration(capfd):
 
     # 1. Check it starts with expected pi prefix
     expected_prefix = "The first 30"
-    assert expected_prefix in result, (
-        f"Output does not contain expected prefix: {expected_prefix}"
-    )
+    assert expected_prefix in result, f"Output does not contain expected prefix: {expected_prefix}"
 
     # Check for pi value pattern
     pi_pattern = r"3\.14159"
@@ -46,6 +44,4 @@ async def test_multi_level_demo_integration(capfd):
     # 2. Ensure no 'sorry', 'error', or apology-like words
     forbidden_patterns = [r"sorry", r"error", r"apolog"]
     for pat in forbidden_patterns:
-        assert not re.search(pat, result, re.IGNORECASE), (
-            f"Output contains forbidden pattern: {pat}"
-        )
+        assert not re.search(pat, result, re.IGNORECASE), f"Output contains forbidden pattern: {pat}"

@@ -33,7 +33,6 @@ class OxyState(Enum):  # The status of the node (oxy)
     SKIPPED = auto()
     CANCELED = auto()
 
-
 class OxyRequest(BaseModel):
     """Envelope for a single MAS task invocation.
 

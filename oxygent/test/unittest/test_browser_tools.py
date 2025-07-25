@@ -7,11 +7,7 @@ from typing import Optional, AsyncGenerator
 from unittest.mock import patch, MagicMock
 
 # Add project root directory to Python path
-sys.path.append(
-    os.path.dirname(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    )
-)
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
 
 try:
     import pytest
@@ -35,22 +31,20 @@ from mcp_servers.browser_tools import (
     browser_tab_list,
     browser_tab_new,
     browser_tab_close,
-    _close_browser,
+    _close_browser
 )
 
 # 配置 pytest-asyncio 使用 auto 模式
-pytest_plugins = ("pytest_asyncio",)
-
+pytest_plugins = ('pytest_asyncio',)
 
 class TestBrowserTools:
     _browser: Optional[Browser] = None
     _context: Optional[BrowserContext] = None
-
+    
     @pytest_asyncio.fixture(autouse=True)
     async def setup_browser(self) -> AsyncGenerator[None, None]:
         """Setup browser context for each test."""
         from mcp_servers.browser_tools import _browser, _context
-
         try:
             await _ensure_browser()
             yield
@@ -60,27 +54,22 @@ class TestBrowserTools:
     def test_check_dependencies(self) -> None:
         """Test dependency checking functionality."""
         # Test case 1: playwright is installed
-        with patch("importlib.import_module") as mock_import:
+        with patch('importlib.import_module') as mock_import:
             mock_import.return_value = MagicMock()
             missing_deps = check_dependencies()
-            assert len(missing_deps) == 0, (
-                "Should return empty list when playwright is installed"
-            )
+            assert len(missing_deps) == 0, "Should return empty list when playwright is installed"
 
         # Test case 2: playwright is not installed
-        with patch("importlib.import_module") as mock_import:
+        with patch('importlib.import_module') as mock_import:
             mock_import.side_effect = ImportError()
             missing_deps = check_dependencies()
-            assert "playwright" in missing_deps, (
-                "Should return list containing playwright when not installed"
-            )
+            assert 'playwright' in missing_deps, "Should return list containing playwright when not installed"
 
     @pytest.mark.asyncio
     async def test_ensure_browser(self) -> None:
         """Test browser initialization functionality."""
         try:
             from mcp_servers.browser_tools import _browser, _context
-
             assert _browser is not None, "Browser instance should be created"
             assert _context is not None, "Browser context should be created"
         except ImportError as e:
@@ -107,7 +96,9 @@ class TestBrowserTools:
         """Test search functionality."""
         # Test case: basic search with Bing
         result = await browser_search(
-            query="test search", search_engine="bing", num_results=2
+            query="test search",
+            search_engine="bing",
+            num_results=2
         )
         assert isinstance(result, dict), "Search result should be dictionary type"
         assert "results" in result, "Should contain search results"
@@ -117,14 +108,12 @@ class TestBrowserTools:
 
         # Test case: search with invalid engine
         result = await browser_search(
-            query="test search", search_engine="invalid_engine", num_results=1
+            query="test search",
+            search_engine="invalid_engine",
+            num_results=1
         )
-        assert isinstance(result, dict), (
-            "Should return dictionary even with invalid search engine"
-        )
-        assert "results" in result, (
-            "Should still contain search results using default engine"
-        )
+        assert isinstance(result, dict), "Should return dictionary even with invalid search engine"
+        assert "results" in result, "Should still contain search results using default engine"
 
     @pytest.mark.asyncio
     async def test_browser_click_and_hover(self) -> None:
@@ -145,7 +134,7 @@ class TestBrowserTools:
         """Test typing functionality."""
         # Navigate to a page with input field
         await browser_navigate("https://www.example.com")
-
+        
         # Test typing into an input field
         result = await browser_type("input", "test text")
         assert "成功在元素" in result, "Should indicate successful typing"
@@ -155,7 +144,7 @@ class TestBrowserTools:
         """Test snapshot functionality."""
         # Navigate to a test page
         await browser_navigate("https://www.example.com")
-
+        
         # Take snapshot
         result = await browser_snapshot()
         assert isinstance(eval(result), dict), "Snapshot should be a dictionary"
@@ -186,26 +175,21 @@ class TestBrowserTools:
         """Test screenshot functionality."""
         # Navigate to a test page
         await browser_navigate("https://www.example.com")
-
+        
         # Test screenshot with base64 return
         result = await browser_take_screenshot()
-        assert result.startswith("data:image/png;base64,"), (
-            "Should return base64 encoded image"
-        )
+        assert result.startswith("data:image/png;base64,"), "Should return base64 encoded image"
 
         # Test screenshot with file save
         test_path = "test_screenshot.png"
         try:
             result = await browser_take_screenshot(path=test_path)
-            assert "截图已保存到" in result, (
-                "Should indicate successful screenshot save"
-            )
+            assert "截图已保存到" in result, "Should indicate successful screenshot save"
             assert os.path.exists(test_path), "Screenshot file should exist"
         finally:
             # Clean up test file
             if os.path.exists(test_path):
                 os.remove(test_path)
 
-
-if __name__ == "__main__":
-    pytest.main(["-v", __file__])
+if __name__ == '__main__':
+    pytest.main(['-v', __file__])

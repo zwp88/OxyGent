@@ -1,4 +1,6 @@
-"""Unit tests for oxygent.utils.data_utils."""
+"""
+Unit tests for oxygent.utils.data_utils
+"""
 
 from oxygent.utils.data_utils import add_post_and_child_node_ids, build_tree
 
@@ -7,8 +9,12 @@ from oxygent.utils.data_utils import add_post_and_child_node_ids, build_tree
 # add_post_and_child_node_ids
 # ──────────────────────────────────────────────────────────────────────────────
 def test_add_post_and_child_node_ids_basic():
-    """A ─┬─► B        (pre-edge) └─► C        (pre-edge) │ └── D        (father-
-    child)"""
+    """
+    A ─┬─► B        (pre-edge)
+        └─► C        (pre-edge)
+        │
+        └── D        (father-child)
+    """
     nodes = [
         {"node_id": "A", "pre_node_ids": [], "father_node_id": ""},
         {"node_id": "B", "pre_node_ids": ["A"], "father_node_id": ""},
@@ -36,10 +42,10 @@ def test_add_post_and_child_missing_pre():
         {"node_id": "X", "pre_node_ids": ["no_exist"], "father_node_id": ""},
         {"node_id": "Y", "pre_node_ids": ["X"], "father_node_id": "no_exist"},
     ]
-    add_post_and_child_node_ids(nodes)
+    add_post_and_child_node_ids(nodes)  
     x = nodes[0]
-    assert x["post_node_ids"] == ["Y"]
-    assert x["child_node_ids"] == []
+    assert x["post_node_ids"] == ["Y"]          
+    assert x["child_node_ids"] == []           
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -54,14 +60,19 @@ def _sorted_nodes(node):
 
 
 def json_key(item):
-    """Deterministic sort key."""
+    """deterministic sort key"""
     if isinstance(item, dict):
         return item["node_id"]
     return str(item)
 
 
 def test_build_tree_with_parallel_groups():
-    """Root ├─ a (order1) ├─ [b,c] parallel └─ d (order4)"""
+    """
+    root
+      ├─ a (order1)
+      ├─ [b,c] parallel 
+      └─ d (order4)
+    """
     input_nodes = [
         {
             "node_id": "root",

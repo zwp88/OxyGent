@@ -1,4 +1,6 @@
-"""Unit tests for ReflexionAgent."""
+"""
+Unit tests for ReflexionAgent
+"""
 
 import pytest
 from unittest.mock import AsyncMock
@@ -12,7 +14,6 @@ from oxygent.schemas import (
     LLMState,
 )
 from oxygent.oxy.base_tool import BaseTool
-
 
 # ──────────────────────────────────────────────────────────────────────────────
 # ❶ Dummy MAS
@@ -43,6 +44,7 @@ def parse_reflect(text: str) -> LLMResponse:
     return LLMResponse(state=LLMState.SUCCESS, output="reflect", ori_response=text)
 
 
+
 class StubTool(BaseTool):
     is_multimodal_supported: bool = False
 
@@ -68,7 +70,6 @@ def mas_env():
 @pytest.fixture
 def reflex_agent(mas_env):
     """使用最简 ReAct 执行器实现，直接返回 ANSWER。"""
-
     class DummyReflexionAgent(ReflexionAgent):
         async def react_execute(self, oxy_request, self_refletion_memory):
             return OxyResponse(
@@ -101,7 +102,7 @@ def oxy_request(monkeypatch, mas_env):
         caller_category="user",
         current_trace_id="trace123",
     )
-    req.mas = mas_env
+    req.mas = mas_env 
 
     async def _fake_call(self, *, callee: str, arguments: dict, **kwargs):
         return OxyResponse(

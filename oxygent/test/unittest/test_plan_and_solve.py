@@ -1,4 +1,6 @@
-"""Unit tests for PlanAndSolve Flow."""
+"""
+Unit tests for PlanAndSolve Flow
+"""
 
 import json
 import pytest
@@ -12,9 +14,10 @@ from oxygent.schemas import LLMResponse, OxyRequest, OxyResponse, OxyState
 # Dummy MAS
 # ──────────────────────────────────────────────────────────────────────────────
 class DummyMAS:
+
     def __init__(self):
         self.oxy_name_to_oxy = {}
-        self.background_tasks = set()
+        self.background_tasks = set()   
         self.message_prefix = "msg"
         self.name = "test_mas"
         self.send_message = AsyncMock()
@@ -27,24 +30,21 @@ class DummyMAS:
 # Helper parsers
 # ──────────────────────────────────────────────────────────────────────────────
 def parse_planner(resp: str) -> LLMResponse:
-    """把 JSON -> Plan."""
+    """把 JSON -> Plan"""
     plan_dict = json.loads(resp)
-    return LLMResponse(
-        state=None, output=None, ori_response=resp, steps=plan_dict["steps"]
-    )
+    return LLMResponse(state=None, output=None, ori_response=resp, steps=plan_dict["steps"])
 
 
 def parse_replanner(resp: str) -> LLMResponse:
     data = json.loads(resp)
     if "response" in data:
         return LLMResponse(
-            state=None,
-            output=None,
-            ori_response=resp,
-            action=Response(response=data["response"]),
+            state=None, output=None, ori_response=resp,
+            action=Response(response=data["response"])
         )
     return LLMResponse(
-        state=None, output=None, ori_response=resp, action=Plan(steps=data["steps"])
+        state=None, output=None, ori_response=resp,
+        action=Plan(steps=data["steps"])
     )
 
 
@@ -129,7 +129,7 @@ def oxy_request(monkeypatch, mas_env):
                 output=json.dumps({"response": "final-answer"}),
                 oxy_request=self,
             )
-        if callee == "mock_llm":
+        if callee == "mock_llm": 
             return OxyResponse(
                 state=OxyState.COMPLETED, output="llm-fallback", oxy_request=self
             )
@@ -145,11 +145,12 @@ def oxy_request(monkeypatch, mas_env):
 async def test_execute_with_preplan(flow_preplan, oxy_request):
     resp = await flow_preplan.execute(oxy_request)
     assert resp.state is OxyState.COMPLETED
-    assert "step2" in resp.output
+    assert "step2" in resp.output       
 
 
 @pytest.mark.asyncio
 async def test_execute_with_planner(flow_full, oxy_request):
     resp = await flow_full.execute(oxy_request)
     assert resp.state is OxyState.COMPLETED
-    assert "step2" in resp.output
+    assert "step2" in resp.output       
+

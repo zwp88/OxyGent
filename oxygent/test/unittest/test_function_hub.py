@@ -1,4 +1,6 @@
-"""Unit tests for FunctionHub."""
+"""
+Unit tests for FunctionHub
+"""
 
 import asyncio
 import pytest
@@ -66,7 +68,6 @@ async def test_init_converts_to_function_tools(func_hub, mas_env):
     assert isinstance(tool, FunctionTool)
     assert tool.desc == "echo"
     from oxygent.schemas import OxyRequest
-
     oxy_req = OxyRequest(
         arguments={"msg": "hello"},
         caller="tester",

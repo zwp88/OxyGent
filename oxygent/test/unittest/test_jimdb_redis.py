@@ -1,4 +1,6 @@
-"""Unit tests for JimdbApRedis."""
+"""
+Unit tests for JimdbApRedis
+"""
 
 import pytest
 from unittest.mock import AsyncMock, patch
@@ -12,9 +14,7 @@ from oxygent.databases.db_redis.jimdb_ap_redis import JimdbApRedis
 @pytest.fixture
 def redis_client(monkeypatch):
     """Create JimdbApRedis with mocked redis_pool."""
-    with patch(
-        "oxygent.databases.db_redis.jimdb_ap_redis.Redis.from_url"
-    ) as mock_from_url:
+    with patch("oxygent.databases.db_redis.jimdb_ap_redis.Redis.from_url") as mock_from_url:
         mock_pool = AsyncMock()
         mock_from_url.return_value = mock_pool
 

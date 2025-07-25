@@ -1,4 +1,6 @@
-"""Unit tests for JesEs (extends BaseEs -> BaseDatabase)"""
+"""
+Unit tests for JesEs (extends BaseEs -> BaseDatabase)
+"""
 
 import pytest
 from unittest.mock import AsyncMock, patch
@@ -25,9 +27,7 @@ def mock_client():
 @pytest.fixture
 def jes_es(monkeypatch, mock_client):
     # patch AsyncElasticsearch constructor to return mock_client
-    with patch(
-        "oxygent.databases.db_es.jes_es.AsyncElasticsearch", return_value=mock_client
-    ):
+    with patch("oxygent.databases.db_es.jes_es.AsyncElasticsearch", return_value=mock_client):
         es = JesEs(hosts=["localhost:9200"], user="user", password="pass")
         yield es
 
@@ -55,18 +55,14 @@ async def test_create_index_existing(jes_es, mock_client):
 async def test_index_doc(jes_es, mock_client):
     res = await jes_es.index("idx", "1", {"field": "val"})
     assert res["result"] == "created"
-    mock_client.index.assert_awaited_once_with(
-        index="idx", id="1", body={"field": "val"}
-    )
+    mock_client.index.assert_awaited_once_with(index="idx", id="1", body={"field": "val"})
 
 
 @pytest.mark.asyncio
 async def test_update_doc(jes_es, mock_client):
     res = await jes_es.update("idx", "1", {"field": "new"})
     assert res["result"] == "updated"
-    mock_client.update.assert_awaited_once_with(
-        index="idx", id="1", body={"doc": {"field": "new"}}
-    )
+    mock_client.update.assert_awaited_once_with(index="idx", id="1", body={"doc": {"field": "new"}})
 
 
 @pytest.mark.asyncio

@@ -11,6 +11,7 @@ from oxygent.prompts import INTENTION_PROMPT
 Config.set_agent_llm_model("default_llm")
 
 
+
 async def workflow(oxy_request: OxyRequest):
     short_memory = oxy_request.get_short_memory()
     print("--- History record --- :", short_memory)
@@ -43,6 +44,8 @@ async def workflow(oxy_request: OxyRequest):
         return f"Save {n} positions: {oxy_response.output}"
     else:
         return "Save 2 positions: 3.14, or you could ask me to save how many positions you want."
+
+
 
 
 def update_query(oxy_request: OxyRequest) -> OxyRequest:
@@ -100,12 +103,7 @@ oxy_space = [
     ),
     oxy.ReActAgent(
         name="master_agent",
-        sub_agents=[
-            "time_agent",
-            "file_agent",
-            "math_agent",
-            "browser_agent",
-        ],  # 添加browser_agent到子代理列表
+        sub_agents=["time_agent", "file_agent", "math_agent", "browser_agent"],  # 添加browser_agent到子代理列表
         is_master=True,
         func_format_output=format_output,
         timeout=100,

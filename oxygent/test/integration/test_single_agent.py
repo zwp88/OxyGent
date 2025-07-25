@@ -11,8 +11,8 @@ from examples.agents.single_demo import main
 async def test_single_demo_integration(capfd):
     """Integration test for single_demo.
 
-    This test runs the single_demo main function and verifies that the output contains a
-    reasonable assistant response, without hardcoding exact LLM outputs.
+    This test runs the single_demo main function and verifies that the output
+    contains a reasonable assistant response, without hardcoding exact LLM outputs.
     """
 
     # Run the main function in single_demo

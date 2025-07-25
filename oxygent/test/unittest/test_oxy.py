@@ -1,4 +1,5 @@
-"""Unit tests for base_oxy.py (Oxy Base Class)
+"""
+Unit tests for base_oxy.py (Oxy Base Class)
 
 This test suite verifies the core behaviors of the Oxy abstract base class, including:
 - Attribute initialization
@@ -13,14 +14,10 @@ import asyncio
 from oxygent.oxy.base_oxy import Oxy
 from oxygent.schemas import OxyRequest, OxyResponse, OxyState
 
-
 # Define a dummy subclass to implement the abstract method _execute
 class DummyOxy(Oxy):
     async def _execute(self, oxy_request: OxyRequest) -> OxyResponse:
-        return OxyResponse(
-            state=OxyState.COMPLETED, output="dummy_output", oxy_request=oxy_request
-        )
-
+        return OxyResponse(state=OxyState.COMPLETED, output="dummy_output", oxy_request=oxy_request)
 
 @pytest.mark.asyncio
 class TestBaseOxy:
@@ -55,9 +52,7 @@ class TestBaseOxy:
 
     async def test_execute_runs_lifecycle(self, dummy_oxy):
         """Test that the execute method runs end-to-end returning OxyResponse."""
-        oxy_request = OxyRequest(
-            arguments={}, caller="test", current_trace_id="trace123"
-        )
+        oxy_request = OxyRequest(arguments={}, caller="test", current_trace_id="trace123")
         response = await dummy_oxy.execute(oxy_request)
         assert isinstance(response, OxyResponse)
         assert response.state == OxyState.COMPLETED
