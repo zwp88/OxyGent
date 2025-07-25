@@ -155,7 +155,7 @@ async def main():
     # Method 2
     async with MAS(oxy_space=oxy_space) as mas:
         await mas.start_web_service(
-            first_query="搜索‘武汉市天气’，提取搜索结果的天气概览数据保存到`./local_file/weather-{今日日期}.txt`"
+            first_query="搜索‘武汉市天气’，提取搜索结果的天气概览数据保存到`./local_file/weather-{今天日期}.txt`"
         )
 
 

@@ -14,7 +14,7 @@ Your answer content
 <think>Your thinking (if analysis is needed)</think>
 Your question to the user
 
-After the user or tools answers your question, you must respond with a tool call using the JSON format in point 3 below to continue the task. Do not respond with direct text.
+After the user or tools answers your question, you must respond with a tool call using the JSON format in point 3 below to continue the task. Do not respond with direct text. This is critical - after receiving any answer (from user or tools), you must always use a tool call to proceed with the task.
 
 3. When you need to use a tool, you must only respond with the exact JSON object format below, nothing else:
 ```json
@@ -29,7 +29,61 @@ After the user or tools answers your question, you must respond with a tool call
 
 4. When a tool is still executing, you must wait for its result before calling another tool. Never call a new tool until you have received and processed the results of the previous tool call. During this waiting period, do not issue any new instructions or prompts. Remain silent until you receive the tool execution result. This ensures proper context flow between tool calls.
 
-5. When calling multiple tools in sequence, make sure to correctly pass context and information from previous tool results to subsequent tool calls.
+5. When calling multiple tools in sequence, you MUST correctly pass context and information from previous tool results to subsequent tool calls:
+   - Include relevant data from previous tool results in the arguments of your next tool call
+   - Maintain state and context across multiple tool calls by explicitly passing important information forward
+   - Never assume tools have access to previous results unless you explicitly provide that information
+   - If a tool returns data that will be needed by a future tool, you must store that data and include it in the future tool call
+   - For complex workflows, track key information (IDs, paths, query results, etc.) and pass them to subsequent tools
+
+   Example of correct context passing between tools:
+   ```
+   # First tool call
+   {
+       "think": "I need to search for information about climate change",
+       "tool_name": "search_web",
+       "arguments": {
+           "query": "latest climate change research 2025"
+       }
+   }
+   
+   # After receiving search results that mention a specific research paper
+   {
+       "think": "The search results mention an important paper by Dr. Smith. I should get more details about it.",
+       "tool_name": "fetch_paper_details",
+       "arguments": {
+           "paper_title": "Climate Patterns 2025",
+           "author": "Dr. Smith",
+           "search_context": "From previous search: paper published in Nature Climate Journal"
+       }
+   }
+   ```
+
+6. For complex multi-step tasks, maintain a clear mental model of the current state:
+   - Keep track of what information you've already collected
+   - Remember what steps have been completed and what remains to be done
+   - When resuming after receiving tool results, briefly review the overall task goal
+   - For long sequences of tool calls, periodically summarize progress in your "think" section
+
+7. When handling tool call failures or incomplete results:
+   - If a tool call fails or returns incomplete/unexpected results, don't lose context
+   - Include relevant error information in your next tool call to maintain continuity
+   - Adapt your approach based on the error, but preserve the overall task context
+   - Use alternative tools or approaches while carrying forward important context
+   - In your "think" section, briefly note what went wrong and how you're adjusting
+
+6. For complex multi-step tasks, maintain a clear mental model of the current state:
+   - Keep track of what information you've already collected
+   - Remember what steps have been completed and what remains to be done
+   - When resuming after receiving tool results, briefly review the overall task goal
+   - For long sequences of tool calls, periodically summarize progress in your "think" section
+
+7. When handling tool call failures or incomplete results:
+   - If a tool call fails or returns incomplete/unexpected results, don't lose context
+   - Include relevant error information in your next tool call to maintain continuity
+   - Adapt your approach based on the error, but preserve the overall task context
+   - Use alternative tools or approaches while carrying forward important context
+   - In your "think" section, briefly note what went wrong and how you're adjusting
 
 After receiving the tool's response:
 1. Transform the raw data into a natural conversational response
@@ -37,6 +91,8 @@ After receiving the tool's response:
 3. Focus on the most relevant information
 4. Use appropriate context from the user's question
 5. Avoid simply repeating the raw data
+6. Extract and preserve key information that may be needed for future tool calls
+6. Extract and preserve key information that may be needed for future tool calls
 
 Please only use the tools explicitly defined above.
 """
@@ -63,7 +119,7 @@ Your answer content
 <think>Your thinking (if analysis is needed)</think>
 Your question to the user
 
-After the user or tools answers your question, you must respond with a tool call using the JSON format in point 3 below to continue the task. Do not respond with direct text.
+After the user or tools answers your question, you must respond with a tool call using the JSON format in point 3 below to continue the task. Do not respond with direct text. This is critical - after receiving any answer (from user or tools), you must always use a tool call to proceed with the task.
 
 3. When you need to use a tool, you must only respond with the exact JSON object format below, nothing else:
 ```json
@@ -78,7 +134,35 @@ After the user or tools answers your question, you must respond with a tool call
 
 4. When a tool is still executing, you must wait for its result before calling another tool. Never call a new tool until you have received and processed the results of the previous tool call. During this waiting period, do not issue any new instructions or prompts. Remain silent until you receive the tool execution result. This ensures proper context flow between tool calls.
 
-5. When calling multiple tools in sequence, make sure to correctly pass context and information from previous tool results to subsequent tool calls.
+5. When calling multiple tools in sequence, you MUST correctly pass context and information from previous tool results to subsequent tool calls:
+   - Include relevant data from previous tool results in the arguments of your next tool call
+   - Maintain state and context across multiple tool calls by explicitly passing important information forward
+   - Never assume tools have access to previous results unless you explicitly provide that information
+   - If a tool returns data that will be needed by a future tool, you must store that data and include it in the future tool call
+   - For complex workflows, track key information (IDs, paths, query results, etc.) and pass them to subsequent tools
+
+   Example of correct context passing between tools:
+   ```
+   # First tool call
+   {
+       "think": "I need to search for information about climate change",
+       "tool_name": "search_web",
+       "arguments": {
+           "query": "latest climate change research 2025"
+       }
+   }
+   
+   # After receiving search results that mention a specific research paper
+   {
+       "think": "The search results mention an important paper by Dr. Smith. I should get more details about it.",
+       "tool_name": "fetch_paper_details",
+       "arguments": {
+           "paper_title": "Climate Patterns 2025",
+           "author": "Dr. Smith",
+           "search_context": "From previous search: paper published in Nature Climate Journal"
+       }
+   }
+   ```
 
 After receiving the tool's response:
 1. Transform the raw data into a natural conversational response

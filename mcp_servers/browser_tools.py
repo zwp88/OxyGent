@@ -24,6 +24,8 @@ _browser = None
 _context = None
 _pages = {}  # 存储页面的字典，键为页面ID，值为页面对象
 _current_page_id = None  # 当前活动页面的ID
+_data_ready = False  # 标记数据是否已准备好
+_operation_in_progress = False  # 标记操作是否正在进行中
 
 
 # 检查必要的依赖是否已安装
@@ -83,7 +85,7 @@ async def _ensure_page():
 
 async def _close_browser():
     """关闭浏览器"""
-    global _browser, _context, _pages, _current_page_id
+    global _browser, _context, _pages, _current_page_id, _data_ready, _operation_in_progress
     
     if _browser:
         for page_id in list(_pages.keys()):
@@ -92,6 +94,8 @@ async def _close_browser():
         
         _pages = {}
         _current_page_id = None
+        _data_ready = False
+        _operation_in_progress = False
         
         if _context:
             await _context.close()
@@ -101,11 +105,25 @@ async def _close_browser():
         _context = None
 
 
-@mcp.tool(description="导航到指定URL")
+async def _set_operation_status(in_progress=True):
+    """设置操作状态"""
+    global _operation_in_progress, _data_ready
+    _operation_in_progress = in_progress
+    if in_progress:
+        _data_ready = False
+
+async def _verify_data_ready():
+    """验证数据是否已准备好"""
+    global _data_ready
+    _data_ready = True
+    return _data_ready
+
+@mcp.tool(description="导航到指定URL并获取页面内容")
 async def browser_navigate(url: str = Field(description="要导航到的网页URL"),
-                          wait_until: str = Field(default="load", description="等待页面加载的条件，可选值: 'load', 'domcontentloaded', 'networkidle'")):
+                          wait_until: str = Field(default="load", description="等待页面加载的条件，可选值: 'load', 'domcontentloaded', 'networkidle'"),
+                          extract_content: bool = Field(default=True, description="是否提取页面内容")):
     """
-    导航到指定的URL，并等待页面加载完成
+    导航到指定的URL，等待页面加载完成，并自动提取页面主要内容
     """
     # 检查依赖
     missing_deps = check_dependencies()
@@ -113,6 +131,7 @@ async def browser_navigate(url: str = Field(description="要导航到的网页UR
         return f"缺少必要的库: {', '.join(missing_deps)}。请使用pip安装: pip install {' '.join(missing_deps)}"
     
     try:
+        await _set_operation_status(True)
         page = await _ensure_page()
         
         # 验证wait_until参数
@@ -123,12 +142,127 @@ async def browser_navigate(url: str = Field(description="要导航到的网页UR
         # 导航到URL
         response = await page.goto(url, wait_until=wait_until)
         
+        # 等待页面稳定
+        await asyncio.sleep(1)
+        
+        # 获取页面信息
+        page_info = {}
+        if extract_content:
+            # 获取页面标题
+            page_info["title"] = await page.title()
+            
+            # 获取页面URL（可能因重定向而改变）
+            page_info["url"] = page.url
+            
+            # 提取页面主要内容
+            try:
+                # 提取页面文本内容
+                page_text = await page.evaluate("""() => {
+                    // 尝试获取主要内容区域
+                    const mainContent = document.querySelector('main') ||
+                                        document.querySelector('article') ||
+                                        document.querySelector('#content') ||
+                                        document.querySelector('.content') ||
+                                        document.body;
+                    
+                    // 如果找到主要内容区域，则返回其文本
+                    if (mainContent) {
+                        return mainContent.innerText;
+                    }
+                    
+                    // 否则返回页面所有文本
+                    return document.body.innerText;
+                }""")
+                
+                # 如果文本太长，截取前3000个字符
+                if len(page_text) > 3000:
+                    page_info["content"] = page_text[:3000] + "...(内容已截断)"
+                else:
+                    page_info["content"] = page_text
+                
+                # 提取页面元数据
+                meta_data = await page.evaluate("""() => {
+                    const metadata = {};
+                    
+                    // 获取所有meta标签
+                    const metaTags = document.querySelectorAll('meta');
+                    for (const meta of metaTags) {
+                        const name = meta.getAttribute('name') || meta.getAttribute('property');
+                        const content = meta.getAttribute('content');
+                        if (name && content) {
+                            metadata[name] = content;
+                        }
+                    }
+                    
+                    return metadata;
+                }""")
+                
+                # 提取重要的元数据
+                important_meta = ["description", "keywords", "og:title", "og:description"]
+                page_info["metadata"] = {}
+                for key in important_meta:
+                    if key in meta_data:
+                        page_info["metadata"][key] = meta_data[key]
+                
+                # 提取页面上的主要链接
+                links = await page.evaluate("""() => {
+                    const mainLinks = [];
+                    const links = document.querySelectorAll('a');
+                    
+                    // 只获取前10个重要链接
+                    let count = 0;
+                    for (const link of links) {
+                        if (count >= 10) break;
+                        
+                        const href = link.getAttribute('href');
+                        const text = link.innerText.trim();
+                        
+                        // 过滤掉空链接和无文本链接
+                        if (href && text && href !== '#' && !href.startsWith('javascript:')) {
+                            mainLinks.push({ text, href });
+                            count++;
+                        }
+                    }
+                    
+                    return mainLinks;
+                }""")
+                
+                page_info["main_links"] = links
+                
+            except Exception as content_error:
+                page_info["content_error"] = f"提取页面内容时发生错误: {str(content_error)}"
+        
+        await _verify_data_ready()
+        
         if response:
-            return f"成功导航到 {url}，状态码: {response.status}"
+            result = {
+                "status": "success",
+                "status_code": response.status,
+                "url": url,
+                "final_url": page.url,
+                "message": f"成功导航到 {url}，状态码: {response.status}，数据已准备就绪"
+            }
+            
+            # 如果提取了页面内容，则添加到结果中
+            if extract_content and page_info:
+                result["page_info"] = page_info
+            
+            await _set_operation_status(False)
+            return result
         else:
-            return f"导航到 {url} 失败，未收到响应"
+            await _set_operation_status(False)
+            return {
+                "status": "error",
+                "url": url,
+                "message": f"导航到 {url} 失败，未收到响应"
+            }
     except Exception as e:
-        return f"导航到 {url} 时发生错误: {str(e)}"
+        await _set_operation_status(False)
+        return {
+            "status": "error",
+            "url": url,
+            "message": f"导航到 {url} 时发生错误: {str(e)}"
+        }
 
 
 @mcp.tool(description="返回上一页")
@@ -142,10 +276,18 @@ async def browser_navigate_back():
         return f"缺少必要的库: {', '.join(missing_deps)}。请使用pip安装: pip install {' '.join(missing_deps)}"
     
     try:
+        await _set_operation_status(True)
         page = await _ensure_page()
         await page.go_back()
-        return "成功返回上一页"
+        
+        # 等待页面稳定
+        await asyncio.sleep(1)
+        await _verify_data_ready()
+        
+        await _set_operation_status(False)
+        return "成功返回上一页，数据已准备就绪"
     except Exception as e:
+        await _set_operation_status(False)
         return f"返回上一页时发生错误: {str(e)}"
 
 
@@ -160,10 +302,18 @@ async def browser_navigate_forward():
         return f"缺少必要的库: {', '.join(missing_deps)}。请使用pip安装: pip install {' '.join(missing_deps)}"
     
     try:
+        await _set_operation_status(True)
         page = await _ensure_page()
         await page.go_forward()
-        return "成功前进到下一页"
+        
+        # 等待页面稳定
+        await asyncio.sleep(1)
+        await _verify_data_ready()
+        
+        await _set_operation_status(False)
+        return "成功前进到下一页，数据已准备就绪"
     except Exception as e:
+        await _set_operation_status(False)
         return f"前进到下一页时发生错误: {str(e)}"
 
 
@@ -179,6 +329,7 @@ async def browser_click(selector: str = Field(description="要点击的元素的
         return f"缺少必要的库: {', '.join(missing_deps)}。请使用pip安装: pip install {' '.join(missing_deps)}"
     
     try:
+        await _set_operation_status(True)
         page = await _ensure_page()
         
         # 等待元素出现
@@ -187,8 +338,14 @@ async def browser_click(selector: str = Field(description="要点击的元素的
         # 点击元素
         await page.click(selector)
         
-        return f"成功点击元素: {selector}"
+        # 等待可能的页面变化
+        await asyncio.sleep(1)
+        await _verify_data_ready()
+        
+        await _set_operation_status(False)
+        return f"成功点击元素: {selector}，数据已准备就绪"
     except Exception as e:
+        await _set_operation_status(False)
         return f"点击元素 {selector} 时发生错误: {str(e)}"
 
 
@@ -204,6 +361,7 @@ async def browser_hover(selector: str = Field(description="要悬停的元素的
         return f"缺少必要的库: {', '.join(missing_deps)}。请使用pip安装: pip install {' '.join(missing_deps)}"
     
     try:
+        await _set_operation_status(True)
         page = await _ensure_page()
         
         # 等待元素出现
@@ -212,8 +370,14 @@ async def browser_hover(selector: str = Field(description="要悬停的元素的
         # 悬停在元素上
         await page.hover(selector)
         
-        return f"成功悬停在元素上: {selector}"
+        # 等待可能的页面变化（如悬停菜单出现）
+        await asyncio.sleep(0.5)
+        await _verify_data_ready()
+        
+        await _set_operation_status(False)
+        return f"成功悬停在元素上: {selector}，数据已准备就绪"
     except Exception as e:
+        await _set_operation_status(False)
         return f"悬停在元素 {selector} 上时发生错误: {str(e)}"
 
 
@@ -230,6 +394,7 @@ async def browser_type(selector: str = Field(description="要输入文本的元�
         return f"缺少必要的库: {', '.join(missing_deps)}。请使用pip安装: pip install {' '.join(missing_deps)}"
     
     try:
+        await _set_operation_status(True)
         page = await _ensure_page()
         
         # 等待元素出现
@@ -240,9 +405,12 @@ async def browser_type(selector: str = Field(description="要输入文本的元�
         
         # 输入文本
         await page.type(selector, text)
+        await _verify_data_ready()
         
-        return f"成功在元素 {selector} 中输入文本"
+        await _set_operation_status(False)
+        return f"成功在元素 {selector} 中输入文本，数据已准备就绪"
     except Exception as e:
+        await _set_operation_status(False)
         return f"在元素 {selector} 中输入文本时发生错误: {str(e)}"
 
 
@@ -257,6 +425,7 @@ async def browser_snapshot():
         return f"缺少必要的库: {', '.join(missing_deps)}。请使用pip安装: pip install {' '.join(missing_deps)}"
     
     try:
+        await _set_operation_status(True)
         page = await _ensure_page()
         
         # 获取页面信息
@@ -278,11 +447,15 @@ async def browser_snapshot():
         snapshot = {
             "title": title,
             "url": url,
-            "text": text
+            "text": text,
+            "data_complete": True
         }
         
+        await _verify_data_ready()
+        await _set_operation_status(False)
         return str(snapshot)
     except Exception as e:
+        await _set_operation_status(False)
         return f"捕获页面快照时发生错误: {str(e)}"
 
 
@@ -298,7 +471,11 @@ async def browser_take_screenshot(path: str = Field(default="", description="保
         return f"缺少必要的库: {', '.join(missing_deps)}。请使用pip安装: pip install {' '.join(missing_deps)}"
     
     try:
+        await _set_operation_status(True)
         page = await _ensure_page()
+        
+        # 等待页面稳定
+        await asyncio.sleep(0.5)
         
         if path:
             # 确保目录存在
@@ -306,13 +483,18 @@ async def browser_take_screenshot(path: str = Field(default="", description="保
             
             # 截取截图并保存到文件
             await page.screenshot(path=path, full_page=full_page)
-            return f"截图已保存到: {path}"
+            await _verify_data_ready()
+            await _set_operation_status(False)
+            return f"截图已保存到: {path}，数据已准备就绪"
         else:
             # 截取截图并返回base64编码的数据
             screenshot_bytes = await page.screenshot(full_page=full_page)
             base64_data = base64.b64encode(screenshot_bytes).decode('utf-8')
+            await _verify_data_ready()
+            await _set_operation_status(False)
             return f"data:image/png;base64,{base64_data}"
     except Exception as e:
+        await _set_operation_status(False)
         return f"截取页面截图时发生错误: {str(e)}"
 
 
@@ -327,9 +509,11 @@ async def browser_tab_list():
         return f"缺少必要的库: {', '.join(missing_deps)}。请使用pip安装: pip install {' '.join(missing_deps)}"
     
     try:
+        await _set_operation_status(True)
         await _ensure_browser()
         
         if not _pages:
+            await _set_operation_status(False)
             return "没有打开的标签"
         
         tabs = []
@@ -349,8 +533,11 @@ async def browser_tab_list():
                 # 页面可能已关闭
                 pass
         
+        await _verify_data_ready()
+        await _set_operation_status(False)
         return str(tabs)
     except Exception as e:
+        await _set_operation_status(False)
         return f"列出浏览器标签时发生错误: {str(e)}"
 
 
@@ -367,6 +554,7 @@ async def browser_tab_new(url: str = Field(default="about:blank", description="�
         return f"缺少必要的库: {', '.join(missing_deps)}。请使用pip安装: pip install {' '.join(missing_deps)}"
     
     try:
+        await _set_operation_status(True)
         await _ensure_browser()
         
         # 确保_context已初始化
@@ -386,9 +574,14 @@ async def browser_tab_new(url: str = Field(default="about:blank", description="�
         # 如果提供了URL，则导航到该URL
         if url != "about:blank":
             await page.goto(url)
+            # 等待页面加载
+            await asyncio.sleep(1)
         
-        return f"已打开新标签，ID: {page_id}"
+        await _verify_data_ready()
+        await _set_operation_status(False)
+        return f"已打开新标签，ID: {page_id}，数据已准备就绪"
     except Exception as e:
+        await _set_operation_status(False)
         return f"打开新标签时发生错误: {str(e)}"
 
 
@@ -405,15 +598,18 @@ async def browser_tab_close(page_id: str = Field(default="", description="要关
         return f"缺少必要的库: {', '.join(missing_deps)}。请使用pip安装: pip install {' '.join(missing_deps)}"
     
     try:
+        await _set_operation_status(True)
         await _ensure_browser()
         
         if not _pages:
+            await _set_operation_status(False)
             return "没有打开的标签可关闭"
         
         # 确定要关闭的页面ID
         target_page_id = page_id if page_id and page_id in _pages else _current_page_id
         
         if target_page_id not in _pages:
+            await _set_operation_status(False)
             return f"找不到ID为 {target_page_id} 的标签"
         
         # 关闭页面
@@ -427,22 +623,26 @@ async def browser_tab_close(page_id: str = Field(default="", description="要关
             else:
                 _current_page_id = None
         
-        return f"已关闭标签，ID: {target_page_id}"
+        await _verify_data_ready()
+        await _set_operation_status(False)
+        return f"已关闭标签，ID: {target_page_id}，操作已完成"
     except Exception as e:
+        await _set_operation_status(False)
         return f"关闭标签时发生错误: {str(e)}"
 
 
 
 
-@mcp.tool(description="执行网络搜索并返回搜索结果")
+@mcp.tool(description="执行网络搜索并返回搜索结果及页面内容")
 async def browser_search(
     query: str = Field(description="搜索查询"),
     search_engine: Literal["google", "bing", "baidu"] = Field(default="bing", description="搜索引擎，支持google、bing或baidu"),
     num_results: int = Field(default=5, description="返回的搜索结果数量，最大10个"),
-    timeout: int = Field(default=30, description="搜索操作的超时时间(秒)")
+    timeout: int = Field(default=30, description="搜索操作的超时时间(秒)"),
+    extract_page_content: bool = Field(default=True, description="是否提取页面主要内容，用于二次确认")
 ):
     """
-    使用指定的搜索引擎执行网络搜索，并返回结构化的搜索结果
+    使用指定的搜索引擎执行网络搜索，并返回结构化的搜索结果及页面主要内容
     """
     # 检查依赖
     missing_deps = check_dependencies()
@@ -459,6 +659,8 @@ async def browser_search(
     results = []
     partial_results = False
     error_message = None
+    
+    await _set_operation_status(True)
     
     try:
         # 确保浏览器已启动
@@ -682,12 +884,76 @@ async def browser_search(
                 summary += f"   摘要: {snippet}\n"
             summary += '\n'
         
+        # 提取页面主要内容（如果需要）
+        page_content = {}
+        if extract_page_content:
+            try:
+                # 获取页面标题
+                page_content["title"] = await page.title()
+                
+                # 获取页面URL
+                page_content["url"] = page.url
+                
+                # 提取页面主要内容
+                page_text = await page.evaluate("""() => {
+                    // 尝试获取主要内容区域
+                    const mainContent = document.querySelector('main') ||
+                                        document.querySelector('article') ||
+                                        document.querySelector('#content') ||
+                                        document.querySelector('.content') ||
+                                        document.body;
+                    
+                    // 如果找到主要内容区域，则返回其文本
+                    if (mainContent) {
+                        return mainContent.innerText;
+                    }
+                    
+                    // 否则返回页面所有文本
+                    return document.body.innerText;
+                }""")
+                
+                # 如果文本太长，截取前3000个字符
+                if len(page_text) > 3000:
+                    page_content["content"] = page_text[:3000] + "...(内容已截断)"
+                else:
+                    page_content["content"] = page_text
+                
+                # 提取页面元数据
+                meta_data = await page.evaluate("""() => {
+                    const metadata = {};
+                    
+                    // 获取所有meta标签
+                    const metaTags = document.querySelectorAll('meta');
+                    for (const meta of metaTags) {
+                        const name = meta.getAttribute('name') || meta.getAttribute('property');
+                        const content = meta.getAttribute('content');
+                        if (name && content) {
+                            metadata[name] = content;
+                        }
+                    }
+                    
+                    return metadata;
+                }""")
+                
+                # 提取重要的元数据
+                important_meta = ["description", "keywords", "og:title", "og:description"]
+                page_content["metadata"] = {}
+                for key in important_meta:
+                    if key in meta_data:
+                        page_content["metadata"][key] = meta_data[key]
+                
+            except Exception as content_error:
+                page_content["content_error"] = f"提取页面内容时发生错误: {str(content_error)}"
+        
         response = {
             "query": query,
             "search_engine": search_engine,
             "results": results,
             "summary": summary
         }
+        
+        if extract_page_content and page_content:
+            response["page_content"] = page_content
         
         if error_message:
             response["error"] = error_message
@@ -715,7 +981,7 @@ async def browser_search(
                     summary += f"   摘要: {snippet}\n"
                 summary += '\n'
             
-            return {
+            result = {
                 "query": query,
                 "search_engine": search_engine,
                 "results": results,
@@ -723,8 +989,42 @@ async def browser_search(
                 "error": error_msg,
                 "partial_results": True
             }
+            
+            # 在异常处理中，我们不尝试提取页面内容，因为页面可能已经不可用
+            # 只添加一个说明，表明由于错误无法提取页面内容
+            if extract_page_content:
+                result["content_error"] = "由于发生错误，无法提取页面内容"
+            
+            return result
         else:
             return error_msg
+
+# 添加一个工具来检查操作状态
+@mcp.tool(description="检查浏览器操作状态")
+async def browser_check_status():
+    """
+    检查浏览器操作状态，确认数据是否已准备就绪
+    """
+    global _operation_in_progress, _data_ready
+    
+    try:
+        if _browser is None:
+            return {
+                "browser_initialized": False,
+                "operation_in_progress": False,
+                "data_ready": False,
+                "message": "浏览器尚未初始化"
+            }
+        
+        return {
+            "browser_initialized": True,
+            "operation_in_progress": _operation_in_progress,
+            "data_ready": _data_ready,
+            "active_pages": len(_pages),
+            "message": "数据已准备就绪" if _data_ready else "操作正在进行中，数据尚未准备就绪"
+        }
+    except Exception as e:
+        return f"检查浏览器状态时发生错误: {str(e)}"
 
 # 注册关闭事件处理函数
 # FastMCP可能没有on_shutdown方法，我们使用atexit模块来确保浏览器在程序退出时关闭
@@ -733,7 +1033,10 @@ import asyncio
 
 # 创建一个同步函数来关闭浏览器
 def close_browser_sync():
+    global _operation_in_progress, _data_ready
     if _browser is not None:
+        _operation_in_progress = False
+        _data_ready = False
         loop = asyncio.get_event_loop()
         if loop.is_running():
             loop.create_task(_close_browser())
