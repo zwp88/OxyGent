@@ -1,6 +1,4 @@
-"""
-Unit tests for LocalRedis
-"""
+"""Unit tests for LocalRedis."""
 
 import time
 import pytest

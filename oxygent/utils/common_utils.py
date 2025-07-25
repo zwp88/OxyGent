@@ -43,8 +43,8 @@ def get_timestamp():
 
 def get_format_time():
     """Yyyy-MM-dd HH:mm:ss."""
-    """yyyy-MM-dd HH:mm:ss.SSS"""
-    """yyyy-MM-dd HH:mm:ss.SSSSSSSSS"""
+    """Yyyy-MM-dd HH:mm:ss.SSS."""
+    """Yyyy-MM-dd HH:mm:ss.SSSSSSSSS."""
     now = datetime.now()
     nano_str = "{:09d}".format(
         now.microsecond * 1000

@@ -53,12 +53,12 @@ class Config:
             "is_detailed_tool_call": True,
             "is_detailed_observation": True,
         },
-        "llm": {    
+        "llm": {
             "cls": "oxygent.llms.OllamaLLM",
             "base_url": "http://localhost:11434",
-            "temperature": 0.1, 
-            "max_tokens": 4096, 
-            "top_p": 1
+            "temperature": 0.1,
+            "max_tokens": 4096,
+            "top_p": 1,
         },
         "cache": {"save_dir": "./cache_dir"},
         "message": {

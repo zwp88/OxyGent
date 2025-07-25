@@ -19,9 +19,9 @@ logger = logging.getLogger(__name__)
 class OpenAILLM(RemoteLLM):
     """OpenAI Large Language Model implementation.
 
-    This class provides a concrete implementation of RemoteLLM specifically designed
-    for OpenAI's language models. It uses the official AsyncOpenAI client for
-    optimal performance and compatibility with OpenAI's API standards.
+    This class provides a concrete implementation of RemoteLLM specifically designed for
+    OpenAI's language models. It uses the official AsyncOpenAI client for optimal
+    performance and compatibility with OpenAI's API standards.
     """
 
     async def _execute(self, oxy_request: OxyRequest) -> OxyResponse:

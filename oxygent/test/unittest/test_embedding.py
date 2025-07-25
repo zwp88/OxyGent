@@ -1,6 +1,4 @@
-"""
-Unit tests for EmbeddingCache & get_embedding
-"""
+"""Unit tests for EmbeddingCache & get_embedding."""
 
 import base64
 import json
@@ -16,9 +14,11 @@ import oxygent.embedding_cache as ec
 # ──────────────────────────────────────────────────────────────────────────────
 @pytest.fixture
 def cache(tmp_path, monkeypatch):
-    """Use tmp_path to isolate .pkl files"""
+    """Use tmp_path to isolate .pkl files."""
     # patch Config.get_cache_save_dir to tmp_path
-    monkeypatch.setattr("oxygent.embedding_cache.Config.get_cache_save_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(
+        "oxygent.embedding_cache.Config.get_cache_save_dir", lambda: str(tmp_path)
+    )
     c = ec.EmbeddingCache(save_batch=2)  # small batch for testing
     yield c
     c.save()  # ensure persistence
@@ -28,7 +28,7 @@ def cache(tmp_path, monkeypatch):
 # Tests for EmbeddingCache class
 # ──────────────────────────────────────────────────────────────────────────────
 def test_md5_and_set_get(cache):
-    """Basic MD5, set, is_in behaviour"""
+    """Basic MD5, set, is_in behaviour."""
     key = "hello"
     vec = np.array([1, 2, 3])
 
@@ -43,7 +43,7 @@ def test_md5_and_set_get(cache):
 
 
 def test_save_and_load(cache):
-    """save() writes pickle, load() restores"""
+    """Save() writes pickle, load() restores."""
     key = "persist"
     vec = np.array([9, 9, 9])
     cache.set(key, vec)
@@ -56,10 +56,9 @@ def test_save_and_load(cache):
     assert (c2.data[md5] == vec).all()
 
 
-
 @pytest.mark.asyncio
 async def test_get_batch_mixed(monkeypatch, cache):
-    """get batch with some keys cached, others not"""
+    """Get batch with some keys cached, others not."""
 
     # Pre-cache one key
     cache.set("cached", np.array([1, 0, 0]))
@@ -80,7 +79,7 @@ async def test_get_batch_mixed(monkeypatch, cache):
 # ──────────────────────────────────────────────────────────────────────────────
 @pytest.mark.asyncio
 async def test_get_embedding_success(monkeypatch):
-    """Mock httpx post to return base64 encoded array"""
+    """Mock httpx post to return base64 encoded array."""
 
     class FakeResponse:
         def json(self):
@@ -89,8 +88,10 @@ async def test_get_embedding_success(monkeypatch):
             return {"outputs": [{"data": [b64]}]}
 
     # patch Config.get_vearch_embedding_model_url
-    monkeypatch.setattr("oxygent.embedding_cache.Config.get_vearch_embedding_model_url",
-                        lambda: "http://fake_url")
+    monkeypatch.setattr(
+        "oxygent.embedding_cache.Config.get_vearch_embedding_model_url",
+        lambda: "http://fake_url",
+    )
 
     with patch("oxygent.embedding_cache.httpx.AsyncClient") as client_cls:
         client = client_cls.return_value.__aenter__.return_value

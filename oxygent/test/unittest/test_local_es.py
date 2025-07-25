@@ -1,6 +1,4 @@
-"""
-Unit tests for LocalEs
-"""
+"""Unit tests for LocalEs."""
 
 import os
 import shutil
@@ -14,7 +12,10 @@ from oxygent.databases.db_es.local_es import LocalEs
 @pytest.fixture
 def local_es(tmp_path, monkeypatch):
     """Use tmp_path as isolated data_dir for tests."""
-    monkeypatch.setattr("oxygent.databases.db_es.local_es.Config.get_cache_save_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(
+        "oxygent.databases.db_es.local_es.Config.get_cache_save_dir",
+        lambda: str(tmp_path),
+    )
     es = LocalEs()
     yield es
     shutil.rmtree(tmp_path)  # clean up

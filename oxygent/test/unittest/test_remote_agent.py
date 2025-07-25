@@ -1,6 +1,4 @@
-"""
-Unit tests for RemoteAgent
-"""
+"""Unit tests for RemoteAgent."""
 
 import pytest
 from pydantic import ValidationError
@@ -10,7 +8,7 @@ from oxygent.schemas import OxyRequest, OxyResponse, OxyState
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# ❶ Dummy 
+# ❶ Dummy
 # ──────────────────────────────────────────────────────────────────────────────
 class DummyRemoteAgent(RemoteAgent):
     async def _execute(self, oxy_request: OxyRequest) -> OxyResponse:
@@ -56,17 +54,17 @@ def oxy_request():
 # ❸ Tests
 # ──────────────────────────────────────────────────────────────────────────────
 def test_server_url_validation():
-    """不合法协议应触发 ValidationError"""
+    """不合法协议应触发 ValidationError."""
     with pytest.raises(ValidationError):
         DummyRemoteAgent(
             name="bad_remote",
             desc="bad",
-            server_url="ftp://foo.com",  
+            server_url="ftp://foo.com",
         )
 
 
 def test_get_org_returns_marked_copy(dummy_agent):
-    """get_org 应深拷贝并标记 is_remote=True"""
+    """get_org 应深拷贝并标记 is_remote=True."""
     org_copy = dummy_agent.get_org()
 
     assert all(node["is_remote"] for node in org_copy)

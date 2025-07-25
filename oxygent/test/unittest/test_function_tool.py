@@ -1,6 +1,4 @@
-"""
-Unit tests for FunctionTool
-"""
+"""Unit tests for FunctionTool."""
 
 import pytest
 from pydantic import Field

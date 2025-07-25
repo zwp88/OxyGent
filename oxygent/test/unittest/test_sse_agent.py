@@ -1,6 +1,4 @@
-"""
-Unit tests for SSEOxyAgent
-"""
+"""Unit tests for SSEOxyAgent."""
 
 import json
 import pytest
@@ -15,7 +13,7 @@ from oxygent.schemas import OxyRequest, OxyState
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Dummy MAS 
+# Dummy MAS
 # ──────────────────────────────────────────────────────────────────────────────
 class DummyMAS:
     def __init__(self):
@@ -24,7 +22,6 @@ class DummyMAS:
         self.name = "test_mas"
         self.background_tasks = set()
         self.send_message = AsyncMock()
-        
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -61,11 +58,9 @@ def test_url_validation():
 
 @pytest.mark.asyncio
 async def test_init_fetch_org(sse_agent):
-    """init() 会调用 httpx GET /get_organization 并填充 .org"""
+    """Init() 会调用 httpx GET /get_organization 并填充 .org."""
     with respx.mock(assert_all_called=True) as router:
-        router.get(
-            httpx.URL("https://remote-mas.example.com/get_organization")
-        ).mock(
+        router.get(httpx.URL("https://remote-mas.example.com/get_organization")).mock(
             return_value=httpx.Response(
                 200,
                 json={"data": {"organization": [{"id": 1, "is_remote": False}]}},
@@ -79,31 +74,33 @@ async def test_init_fetch_org(sse_agent):
 @pytest.mark.asyncio
 async def test_execute_sse_flow(sse_agent, oxy_request):
     with respx.mock() as router:
-        router.get(
-            httpx.URL("https://remote-mas.example.com/get_organization")
-        ).mock(
-            return_value=httpx.Response(
-                200, json={"data": {"organization": []}}
-            )
+        router.get(httpx.URL("https://remote-mas.example.com/get_organization")).mock(
+            return_value=httpx.Response(200, json={"data": {"organization": []}})
         )
         await sse_agent.init()
 
     sse_payloads = [
-        {"type": "tool_call", "content": {"caller_category": "agent", "callee_category": "agent"}},
-        {"type": "observation", "content": {"caller_category": "agent", "callee_category": "agent"}},
+        {
+            "type": "tool_call",
+            "content": {"caller_category": "agent", "callee_category": "agent"},
+        },
+        {
+            "type": "observation",
+            "content": {"caller_category": "agent", "callee_category": "agent"},
+        },
         {"type": "answer", "content": "pong"},
     ]
-    
-    sse_bytes = b"".join(
-        f"data: {json.dumps(evt)}\n\n".encode()
-        for evt in sse_payloads
-    ) + b"data: done\n\n"
+
+    sse_bytes = (
+        b"".join(f"data: {json.dumps(evt)}\n\n".encode() for evt in sse_payloads)
+        + b"data: done\n\n"
+    )
 
     with aioresponses() as mocked_aio:
         mocked_aio.post(
             "https://remote-mas.example.com/sse/chat",
             status=200,
-            body=sse_bytes,                       
+            body=sse_bytes,
             headers={"Content-Type": "text/event-stream"},
         )
         resp = await sse_agent.execute(oxy_request)

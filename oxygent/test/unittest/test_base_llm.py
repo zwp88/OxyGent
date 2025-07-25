@@ -1,6 +1,4 @@
-"""
-Unit tests for BaseLLM
-"""
+"""Unit tests for BaseLLM."""
 
 import pytest
 from unittest.mock import AsyncMock, patch
@@ -10,7 +8,7 @@ from oxygent.schemas import OxyRequest, OxyResponse, OxyState
 
 
 # ───────────────────────────────────────────────────────────────────────────────
-# ❶ DummyLLM 
+# ❶ DummyLLM
 # ───────────────────────────────────────────────────────────────────────────────
 class DummyLLM(BaseLLM):
     async def _execute(self, oxy_request: OxyRequest) -> OxyResponse:
@@ -44,7 +42,7 @@ def oxy_request(monkeypatch):
         current_trace_id="trace123",
     )
     monkeypatch.setattr(
-        "oxygent.schemas.oxy.OxyRequest.send_message",   
+        "oxygent.schemas.oxy.OxyRequest.send_message",
         AsyncMock(),
         raising=True,
     )
@@ -66,7 +64,6 @@ async def test_execute_and_think(llm, oxy_request):
 
 @pytest.mark.asyncio
 async def test_get_messages_url_to_base64(monkeypatch, llm, oxy_request):
-
     oxy_request.arguments["messages"] = [
         {
             "role": "user",
@@ -80,9 +77,14 @@ async def test_get_messages_url_to_base64(monkeypatch, llm, oxy_request):
 
     llm.is_convert_url_to_base64 = True
 
-    with patch("oxygent.oxy.llms.base_llm.image_to_base64", AsyncMock(return_value="img64")), \
-         patch("oxygent.oxy.llms.base_llm.video_to_base64", AsyncMock(return_value="vid64")):
-
+    with (
+        patch(
+            "oxygent.oxy.llms.base_llm.image_to_base64", AsyncMock(return_value="img64")
+        ),
+        patch(
+            "oxygent.oxy.llms.base_llm.video_to_base64", AsyncMock(return_value="vid64")
+        ),
+    ):
         msgs = await llm._get_messages(oxy_request)
         blob = msgs[0]["content"]
 

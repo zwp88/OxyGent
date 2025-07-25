@@ -1,6 +1,4 @@
-"""
-Unit tests for StdioMCPClient
-"""
+"""Unit tests for StdioMCPClient."""
 
 import types
 import pytest
@@ -31,7 +29,7 @@ def mas_env():
 
 @pytest.fixture
 def session_patch():
-    """patch mcp.ClientSession"""
+    """Patch mcp.ClientSession."""
     with patch("oxygent.oxy.mcp_tools.stdio_mcp_client.ClientSession") as cls:
         sess = AsyncMock()
         sess.initialize = AsyncMock()
@@ -75,8 +73,11 @@ def stdio_patch():
 
 @pytest.fixture
 def which_patch():
-    """shutil.which('npx') → '/usr/bin/npx'"""
-    with patch("oxygent.oxy.mcp_tools.stdio_mcp_client.shutil.which", return_value="/usr/bin/npx"):
+    """shutil.which('npx') → '/usr/bin/npx'."""
+    with patch(
+        "oxygent.oxy.mcp_tools.stdio_mcp_client.shutil.which",
+        return_value="/usr/bin/npx",
+    ):
         yield
 
 
@@ -112,7 +113,9 @@ def oxy_request(mas_env):
 # ──────────────────────────────────────────────────────────────────────────────
 @pytest.mark.asyncio
 async def test_init_registers_tools(stdio_client, session_patch):
-    with patch("oxygent.oxy.mcp_tools.stdio_mcp_client.os.path.exists", return_value=True):
+    with patch(
+        "oxygent.oxy.mcp_tools.stdio_mcp_client.os.path.exists", return_value=True
+    ):
         await stdio_client.init()
 
     assert stdio_client._session is session_patch
@@ -121,7 +124,9 @@ async def test_init_registers_tools(stdio_client, session_patch):
 
 @pytest.mark.asyncio
 async def test_execute_success(stdio_client, session_patch, oxy_request):
-    with patch("oxygent.oxy.mcp_tools.stdio_mcp_client.os.path.exists", return_value=True):
+    with patch(
+        "oxygent.oxy.mcp_tools.stdio_mcp_client.os.path.exists", return_value=True
+    ):
         await stdio_client.init()
 
     oxy_request.callee = "stdio_tool"
@@ -145,6 +150,8 @@ async def test_init_missing_file_raises(which_patch, mas_env):
     )
     bad.set_mas(mas_env)
 
-    with patch("oxygent.oxy.mcp_tools.stdio_mcp_client.os.path.exists", return_value=False):
+    with patch(
+        "oxygent.oxy.mcp_tools.stdio_mcp_client.os.path.exists", return_value=False
+    ):
         with pytest.raises(FileNotFoundError):
             await bad.init()

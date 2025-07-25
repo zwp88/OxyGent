@@ -1,6 +1,4 @@
-"""
-Unit tests for WorkflowAgent
-"""
+"""Unit tests for WorkflowAgent."""
 
 import pytest
 from unittest.mock import AsyncMock
@@ -12,7 +10,7 @@ from oxygent.schemas import OxyRequest, OxyResponse, OxyState
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# ❶ Dummy MAS 
+# ❶ Dummy MAS
 # ──────────────────────────────────────────────────────────────────────────────
 class DummyMAS:
     def __init__(self):
@@ -48,7 +46,9 @@ class MockLLMTool(BaseTool):
     category: str = "llm"
     is_multimodal_supported: bool = False
 
-    async def _execute(self, oxy_request: OxyRequest) -> OxyResponse:  # pragma: no cover
+    async def _execute(
+        self, oxy_request: OxyRequest
+    ) -> OxyResponse:  # pragma: no cover
         return OxyResponse(
             state=OxyState.COMPLETED, output="llm-output", oxy_request=oxy_request
         )
@@ -71,7 +71,7 @@ def patched_config(monkeypatch):
     )
     monkeypatch.setattr(
         "oxygent.oxy.agents.local_agent.Config.get_vearch_config",
-        lambda: None,  
+        lambda: None,
         raising=True,
     )
 
@@ -110,7 +110,7 @@ def oxy_request(monkeypatch, mas_env):
         caller_category="user",
         current_trace_id="trace123",
     )
-    req.mas = mas_env 
+    req.mas = mas_env
 
     async def _fake_call(self, *, callee: str, arguments: dict, **kwargs):
         if callee == "echo_tool":

@@ -1,6 +1,4 @@
-"""
-Unit tests for PydanticOutputParser
-"""
+"""Unit tests for PydanticOutputParser."""
 
 import pytest
 from pydantic import BaseModel
@@ -29,14 +27,15 @@ def parser():
 # ──────────────────────────────────────────────────────────────────────────────
 def test_get_format_string_no_escape(parser):
     raw_no_escape = parser.get_format_string(escape_json=False)
-    raw_escape    = parser.get_format_string(escape_json=True)
+    raw_escape = parser.get_format_string(escape_json=True)
 
     # escape=False 时，双大括号出现次数应 *减少*（但不一定为 0）
     assert raw_no_escape.count("{{") < raw_escape.count("{{")
     assert raw_no_escape.count("}}") < raw_escape.count("}}")
 
+
 def test_parse_success(parser):
-    blob = "Result =>  {\"text\":\"ok\",\"score\":10}"
+    blob = 'Result =>  {"text":"ok","score":10}'
     obj = parser.parse(blob)
     assert isinstance(obj, Answer)
     assert obj.text == "ok" and obj.score == 10

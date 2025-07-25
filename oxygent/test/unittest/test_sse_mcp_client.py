@@ -1,6 +1,4 @@
-"""
-Unit tests for SSEMCPClient
-"""
+"""Unit tests for SSEMCPClient."""
 
 import pytest
 from unittest.mock import AsyncMock, patch
@@ -29,7 +27,7 @@ def mas_env():
 
 @pytest.fixture
 def sse_client_patch():
-    """patch mcp.client.sse.sse_client 为 AsyncMock"""
+    """Patch mcp.client.sse.sse_client 为 AsyncMock."""
     with patch("oxygent.oxy.mcp_tools.sse_mcp_client.sse_client") as mock_cli:
         # 返回一个 async context manager -> (read, write)
         def _acm(*args, **kwargs):
@@ -48,8 +46,10 @@ def sse_client_patch():
 
 @pytest.fixture
 def session_patch():
-    """patch mcp.ClientSession"""
-    with patch("oxygent.oxy.mcp_tools.sse_mcp_client.ClientSession") as mock_session_cls:
+    """Patch mcp.ClientSession."""
+    with patch(
+        "oxygent.oxy.mcp_tools.sse_mcp_client.ClientSession"
+    ) as mock_session_cls:
         mock_session = AsyncMock()
         mock_session.__aenter__.return_value = mock_session
         mock_session_cls.return_value = mock_session
@@ -87,6 +87,7 @@ def oxy_request(mas_env):
 async def test_init_success(client, session_patch):
     await client.init()
     assert client._session is session_patch
+
 
 @pytest.mark.asyncio
 async def test_execute_delegates_call(client, oxy_request, session_patch):

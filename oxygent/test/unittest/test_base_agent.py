@@ -1,5 +1,4 @@
-"""
-Unit tests for base_agent.py (BaseAgent Class)
+"""Unit tests for base_agent.py (BaseAgent Class)
 
 This test suite verifies core behaviors of the BaseAgent class, including:
 - Attribute initialization
@@ -15,10 +14,14 @@ from unittest.mock import AsyncMock
 from oxygent.oxy.agents.base_agent import BaseAgent
 from oxygent.schemas import OxyRequest, OxyResponse, OxyState
 
+
 # Define a dummy subclass implementing required abstract methods
 class DummyAgent(BaseAgent):
     async def _execute(self, oxy_request: OxyRequest) -> OxyResponse:
-        return OxyResponse(state=OxyState.COMPLETED, output="dummy_output", oxy_request=oxy_request)
+        return OxyResponse(
+            state=OxyState.COMPLETED, output="dummy_output", oxy_request=oxy_request
+        )
+
 
 @pytest.mark.asyncio
 class TestBaseAgent:
@@ -36,14 +39,16 @@ class TestBaseAgent:
         assert isinstance(dummy_agent.input_schema, dict)
 
     async def test_pre_process_user_request(self, dummy_agent):
-        """Test _pre_process updates root_trace_ids for user requests with from_trace_id."""
-        oxy_request = OxyRequest(arguments={}, caller="test", caller_category="user", from_trace_id="parent_trace")
+        """Test _pre_process updates root_trace_ids for user requests with
+        from_trace_id."""
+        oxy_request = OxyRequest(
+            arguments={},
+            caller="test",
+            caller_category="user",
+            from_trace_id="parent_trace",
+        )
         dummy_agent.mas.es_client.search.return_value = {
-            "hits": {
-                "hits": [{
-                    "_source": {"root_trace_ids": "trace1|trace2"}
-                }]
-            }
+            "hits": {"hits": [{"_source": {"root_trace_ids": "trace1|trace2"}}]}
         }
         result = await dummy_agent._pre_process(oxy_request)
         assert isinstance(result.root_trace_ids, list)
@@ -51,10 +56,14 @@ class TestBaseAgent:
 
     async def test_pre_save_data(self, dummy_agent):
         """Test _pre_save_data stores pre-trace data for user requests."""
-        oxy_request = OxyRequest(arguments={}, caller="test", caller_category="user", current_trace_id="trace123")
+        oxy_request = OxyRequest(
+            arguments={},
+            caller="test",
+            caller_category="user",
+            current_trace_id="trace123",
+        )
         await dummy_agent._pre_save_data(oxy_request)
         dummy_agent.mas.es_client.index.assert_called()
-
 
     async def test_post_save_data(self, dummy_agent):
         """Test _post_save_data stores post-trace data and history."""
@@ -63,9 +72,9 @@ class TestBaseAgent:
             caller="test",
             caller_category="user",
             current_trace_id="trace123",
-            is_save_history=True,      
+            is_save_history=True,
         )
-        oxy_request.callee = dummy_agent.name  
+        oxy_request.callee = dummy_agent.name
         oxy_response = OxyResponse(
             state=OxyState.COMPLETED,
             output="test_output",
@@ -74,4 +83,3 @@ class TestBaseAgent:
 
         await dummy_agent._post_save_data(oxy_response)
         assert dummy_agent.mas.es_client.index.call_count >= 2
-

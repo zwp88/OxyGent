@@ -1,6 +1,4 @@
-"""
-Unit tests for ReActAgent
-"""
+"""Unit tests for ReActAgent."""
 
 import json
 from unittest.mock import AsyncMock
@@ -51,9 +49,7 @@ class MockLLMTool(BaseTool):
     category: str = "llm"
     is_multimodal_supported: bool = False
 
-    async def _execute(
-        self, oxy_request: OxyRequest
-    ) -> OxyResponse:  
+    async def _execute(self, oxy_request: OxyRequest) -> OxyResponse:
         return OxyResponse(
             state=OxyState.COMPLETED, output="llm-output", oxy_request=oxy_request
         )
@@ -76,7 +72,7 @@ def patched_config(monkeypatch):
     )
     monkeypatch.setattr(
         "oxygent.oxy.agents.local_agent.Config.get_vearch_config",
-        lambda: None, 
+        lambda: None,
         raising=True,
     )
 
@@ -95,7 +91,7 @@ def react_agent(patched_config, mas_env):
         name="react_agent",
         desc="UT ReAct Agent",
         tools=["dummy_tool"],
-        trust_mode=True, 
+        trust_mode=True,
         llm_model="mock_llm",
     )
     agent.set_mas(mas_env)
@@ -119,7 +115,7 @@ def oxy_request(monkeypatch):
             )
         elif callee == "dummy_tool":
             return OxyResponse(
-                state=OxyState.COMPLETED,  
+                state=OxyState.COMPLETED,
                 output="tool-exec-ok",
                 oxy_request=self,
             )

@@ -1,13 +1,11 @@
-"""
-Unit tests for ChatAgent (_execute flow)
-
-"""
+"""Unit tests for ChatAgent (_execute flow)"""
 
 import pytest
 from unittest.mock import AsyncMock
 
 from oxygent.oxy.agents.chat_agent import ChatAgent
 from oxygent.schemas import OxyRequest, OxyResponse, OxyState
+
 
 # ────────────────────────────────────────────────────────────────────────────────
 # Dummy stubs used to patch Memory / Message inside chat_agent.py
@@ -27,7 +25,8 @@ class DummyMemory:
 
 
 class DummyMessage:
-    """Return bare-bones dicts compatible with LLM Chat API"""
+    """Return bare-bones dicts compatible with LLM Chat API."""
+
     @staticmethod
     def system_message(content):
         return {"role": "system", "content": content}
@@ -46,10 +45,14 @@ class DummyMessage:
 # ────────────────────────────────────────────────────────────────────────────────
 @pytest.fixture
 def chat_agent(monkeypatch):
-    """Instantiate ChatAgent and patch dependencies"""
+    """Instantiate ChatAgent and patch dependencies."""
     # Patch Memory & Message inside module
-    monkeypatch.setattr("oxygent.oxy.agents.chat_agent.Memory", DummyMemory, raising=True)
-    monkeypatch.setattr("oxygent.oxy.agents.chat_agent.Message", DummyMessage, raising=True)
+    monkeypatch.setattr(
+        "oxygent.oxy.agents.chat_agent.Memory", DummyMemory, raising=True
+    )
+    monkeypatch.setattr(
+        "oxygent.oxy.agents.chat_agent.Message", DummyMessage, raising=True
+    )
 
     agent = ChatAgent(name="chat_agent", desc="UT Chat Agent", llm_model="mock_llm")
     agent._build_instruction = lambda args: "You are a helpful AI assistant."
@@ -58,7 +61,7 @@ def chat_agent(monkeypatch):
 
 @pytest.fixture
 def oxy_request(monkeypatch):
-    """Provide an OxyRequest with minimal viable fields"""
+    """Provide an OxyRequest with minimal viable fields."""
     req = OxyRequest(
         arguments={
             "query": "Hello!",
@@ -67,8 +70,8 @@ def oxy_request(monkeypatch):
         caller="user",
         caller_category="user",
         current_trace_id="trace123",
-        short_memory = [{"role": "assistant", "content": "Prev answer"}],
-        query = "hello!"
+        short_memory=[{"role": "assistant", "content": "Prev answer"}],
+        query="hello!",
     )
     mocked_resp = OxyResponse(
         state=OxyState.COMPLETED,

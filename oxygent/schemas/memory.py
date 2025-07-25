@@ -175,7 +175,8 @@ class Memory(BaseModel):
         return [msg.to_dict() for msg in self.messages]
 
     def _trim_memory(self) -> None:
-        """Ensure memory does not exceed max_messages, keeping system first and deleting (user, agent) pairs."""
+        """Ensure memory does not exceed max_messages, keeping system first and deleting
+        (user, agent) pairs."""
         while len(self.messages) > self.max_messages:
             if len(self.messages) <= 1:
                 # Only system remains, nothing to delete

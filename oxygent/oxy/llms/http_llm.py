@@ -20,10 +20,10 @@ logger = logging.getLogger(__name__)
 class HttpLLM(RemoteLLM):
     """HTTP-based Large Language Model implementation.
 
-    This class provides a concrete implementation of RemoteLLM for communicating
-    with remote LLM APIs over HTTP. It handles API authentication, request
-    formatting, and response parsing for OpenAI-compatible APIs.
-    """ 
+    This class provides a concrete implementation of RemoteLLM for communicating with
+    remote LLM APIs over HTTP. It handles API authentication, request formatting, and
+    response parsing for OpenAI-compatible APIs.
+    """
 
     async def _execute(self, oxy_request: OxyRequest) -> OxyResponse:
         """Execute an HTTP request to the remote LLM API.
@@ -60,15 +60,13 @@ class HttpLLM(RemoteLLM):
             payload[k] = v
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            http_response = await client.post(
-                url, headers=headers, json=payload
-            )
+            http_response = await client.post(url, headers=headers, json=payload)
             http_response.raise_for_status()
             data = http_response.json()
             if "error" in data:
                 error_message = data["error"].get("message", "Unknown error")
                 raise ValueError(f"LLM API error: {error_message}")
-            
+
             if use_openai:
                 response_message = data["choices"][0]["message"]
                 result = response_message.get("content") or response_message.get(
@@ -76,6 +74,5 @@ class HttpLLM(RemoteLLM):
                 )
             else:  # ollama
                 result = data["message"]["content"]
-            
 
             return OxyResponse(state=OxyState.COMPLETED, output=result)

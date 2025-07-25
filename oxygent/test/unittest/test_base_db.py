@@ -1,6 +1,4 @@
-"""
-Unit tests for BaseDB
-"""
+"""Unit tests for BaseDB."""
 
 import pytest
 
@@ -37,7 +35,6 @@ class MyDB(BaseDB):
 # ──────────────────────────────────────────────────────────────────────────────
 @pytest.mark.asyncio
 async def test_try_decorator_direct():
-
     calls = {"n": 0}
 
     @BaseDB.try_decorator(max_retries=3, delay_between_retries=0.01)
@@ -64,7 +61,7 @@ async def test_initsubclass_applies_decorator():
     # fail_once_then_succeed should retry and eventually succeed
     result = await db.fail_once_then_succeed()
     assert result == "recovered"
-    assert db.count == 2  
+    assert db.count == 2
 
     # always_fail should retry default (1 attempt) and return None
     res = await db.always_fail()
