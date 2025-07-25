@@ -13,6 +13,9 @@ Your answer content
 2. When you find that the user's question lacks conditions, you can ask the user back, please respond in the following format:
 <think>Your thinking (if analysis is needed)</think>
 Your question to the user
+
+After the user or tools answers your question, you must respond with a tool call using the JSON format in point 3 below to continue the task. Do not respond with direct text.
+
 3. When you need to use a tool, you must only respond with the exact JSON object format below, nothing else:
 ```json
 {
@@ -23,6 +26,10 @@ Your question to the user
     }
 }
 ```
+
+4. When a tool is still executing, you must wait for its result before calling another tool. Never call a new tool until you have received and processed the results of the previous tool call. During this waiting period, do not issue any new instructions or prompts. Remain silent until you receive the tool execution result. This ensures proper context flow between tool calls.
+
+5. When calling multiple tools in sequence, make sure to correctly pass context and information from previous tool results to subsequent tool calls.
 
 After receiving the tool's response:
 1. Transform the raw data into a natural conversational response
@@ -55,6 +62,9 @@ Your answer content
 2. When you find that the user's question lacks conditions, you can ask the user back, please respond in the following format:
 <think>Your thinking (if analysis is needed)</think>
 Your question to the user
+
+After the user or tools answers your question, you must respond with a tool call using the JSON format in point 3 below to continue the task. Do not respond with direct text.
+
 3. When you need to use a tool, you must only respond with the exact JSON object format below, nothing else:
 ```json
 {
@@ -65,6 +75,10 @@ Your question to the user
     }
 }
 ```
+
+4. When a tool is still executing, you must wait for its result before calling another tool. Never call a new tool until you have received and processed the results of the previous tool call. During this waiting period, do not issue any new instructions or prompts. Remain silent until you receive the tool execution result. This ensures proper context flow between tool calls.
+
+5. When calling multiple tools in sequence, make sure to correctly pass context and information from previous tool results to subsequent tool calls.
 
 After receiving the tool's response:
 1. Transform the raw data into a natural conversational response

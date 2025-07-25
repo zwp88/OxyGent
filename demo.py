@@ -1,5 +1,7 @@
 import asyncio
 import os
+import importlib
+import sys
 
 from pydantic import Field
 
@@ -7,6 +9,7 @@ from oxygent import MAS, Config, OxyRequest, OxyResponse, oxy
 from oxygent.prompts import INTENTION_PROMPT
 
 Config.set_agent_llm_model("default_llm")
+
 
 
 async def workflow(oxy_request: OxyRequest):
@@ -43,20 +46,6 @@ async def workflow(oxy_request: OxyRequest):
         return "Save 2 positions: 3.14, or you could ask me to save how many positions you want."
 
 
-fh = oxy.FunctionHub(name="joke_tools")
-
-
-@fh.tool(description="a tool for telling jokes")
-async def joke_tool(joke_type: str = Field(description="The type of the jokes")):
-    import random
-
-    jokes = [
-        "Teacher: Can you use the word 'because' in a sentence? \n Student: I didn't do my homework because… because I didn't do my homework.",
-        "Patient: Doctor, I feel like a pair of curtains.\nDoctor: Pull yourself together!",
-        "How many software engineers does it take to change a light bulb?\nNone. That's a hardware problem.",
-    ]
-    print("The type of the jokes", joke_type)
-    return random.choice(jokes)
 
 
 def update_query(oxy_request: OxyRequest) -> OxyRequest:
@@ -83,7 +72,6 @@ oxy_space = [
         semaphore=4,
     ),
     oxy.ChatAgent(name="intent_agent", prompt=INTENTION_PROMPT),
-    fh,
     oxy.StdioMCPClient(
         name="time",
         params={
@@ -105,9 +93,17 @@ oxy_space = [
             "args": ["--directory", "./mcp_servers", "run", "my_tools.py"],
         },
     ),
+    # 添加浏览器MCP客户端
+    oxy.StdioMCPClient(
+        name="browser_tools",
+        params={
+            "command": "uv",
+            "args": ["--directory", "./mcp_servers", "run", "browser_tools.py"],
+        },
+    ),
     oxy.ReActAgent(
         name="master_agent",
-        sub_agents=["time_agent", "file_agent", "math_agent"],
+        sub_agents=["time_agent", "file_agent", "math_agent", "browser_agent"],  # 添加browser_agent到子代理列表
         is_master=True,
         func_format_output=format_output,
         timeout=100,
@@ -134,6 +130,13 @@ oxy_space = [
         func_workflow=workflow,
         is_retain_master_short_memory=True,
     ),
+    # 使用MCP客户端的browser_agent
+    oxy.ReActAgent(
+        name="browser_agent",
+        desc="A tool for browser operations like visiting URLs, getting page content, and analyzing web pages.",
+        tools=["browser_tools"],  # 使用browser_tools MCP客户端
+        timeout=30,
+    ),
 ]
 
 
@@ -152,7 +155,7 @@ async def main():
     # Method 2
     async with MAS(oxy_space=oxy_space) as mas:
         await mas.start_web_service(
-            first_query="Please calculate the 20 positions of Pi"
+            first_query="搜索‘武汉市天气’，提取搜索结果的天气概览数据保存到`./local_file/weather-{今日日期}.txt`"
         )
 
 
