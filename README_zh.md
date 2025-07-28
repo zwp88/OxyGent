@@ -215,7 +215,7 @@ OxyGent最新版本 (July 9, 2025) 在[GAIA](https://huggingface.co/spaces/gaia-
     + 提出pull request
 
 感谢您的贡献！ 🎉🎉🎉
-如果您在开发中遇到问题，请参阅 **[OxyGent 文档](http://oxygent.jd.com/docs/)**
+如果您在开发中遇到问题，请参阅**[OxyGent中文指南](./docs/docs_zh/readme.md)** 或者**[OxyGent 文档](http://oxygent.jd.com/docs/)**
 
 ## 7. 社区支持
 ---
