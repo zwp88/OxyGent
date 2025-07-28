@@ -264,3 +264,7 @@ OxyGent 支持像 Agent 一样调用 Flow。您可以通过以下方式调用您
         timeout=100,
     )
 ```
+
+[上一章：创建工作流](./9_workflow.md)
+[下一章：获取记忆和重新生成](./9_1_continue_exec.md)
+[回到首页](./readme.md)

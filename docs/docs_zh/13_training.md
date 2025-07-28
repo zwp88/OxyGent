@@ -170,3 +170,7 @@ if __name__ == "__main__":
     asyncio.run(main())
 
 ```
+
+[上一章：检索增强生成(RAG)](./12_rag.md)
+[下一章：可视化界面调试](./14_debugging.md)
+[回到首页](./readme.md)

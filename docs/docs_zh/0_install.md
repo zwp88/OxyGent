@@ -42,3 +42,6 @@
    pip install oxygent # conda
    uv pip install oxygent # uv
 ```
+
+[下一章：运行demo](./0_1_demo.md)
+[回到首页](./readme.md)

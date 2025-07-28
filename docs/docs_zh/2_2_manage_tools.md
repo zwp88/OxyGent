@@ -26,3 +26,7 @@
         is_retrieve_even_if_tools_scarce = True, # 是否在工具数量不足时保持检索
     ),
 ```
+
+[上一章：使用MCP自定义工具](./2_4_use_mcp_tools.md)
+[下一章：设置OxyGent Config](./3_set_config.md)
+[回到首页](./readme.md)

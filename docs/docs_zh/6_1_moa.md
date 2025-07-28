@@ -13,3 +13,7 @@
 ```
 
 `team_size`目前仅能复制较为简单的智能体，之后我们会支持更完备的智能体复制。
+
+[上一章：创建简单的多agent系统](./6_register_multi_agent.md)
+[下一章：并行调用agent](./7_parallel.md)
+[回到首页](./readme.md)

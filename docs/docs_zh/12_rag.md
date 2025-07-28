@@ -54,7 +54,7 @@ Your response content
 <think>Your reasoning (if analysis is needed)</think>
 Your follow-up question to the user
 3. When you need to use a tool, you must respond **only** with the following exact JSON object format, and nothing else:
-```json
+
 {
     "think": "Your reasoning (if analysis is needed)",
     "tool_name": "Tool name",
@@ -106,4 +106,7 @@ if __name__ == "__main__":
 
 ```
 
-·
+
+[上一章：使用多模态智能体](./10_multimodal.md)
+[下一章：生成训练样本](./13_training.md)
+[回到首页](./readme.md)

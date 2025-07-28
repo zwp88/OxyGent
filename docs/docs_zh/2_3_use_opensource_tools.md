@@ -64,3 +64,7 @@ async def main():
 if __name__ == "__main__":
     asyncio.run(main())
 ```
+
+[上一章：注册一个工具](./2_register_single_tool.md)
+[下一章：使用MCP自定义工具](./2_4_use_mcp_tools.md)
+[回到首页](./readme.md)

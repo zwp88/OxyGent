@@ -167,3 +167,7 @@ oxy.SSEMCPClient(
     sse_url="http://127.0.0.1:9000/sse"
 ),
 ```
+
+[上一章：使用MCP开源工具](./2_3_use_opensource_tools.md)
+[下一章：管理工具调用](./2_2_manage_tools.md)
+[回到首页](./readme.md)

@@ -78,3 +78,6 @@ async def main():
 ![](http://storage.jd.local/ai-gateway-routing/prod_data/oxygent_docs_images/8.png)
 
 详情页同样提供单步调试工具。您可以点击 `regenerate` 在任意节点重新生成output。
+
+[上一章：生成训练样本](./13_training.md)
+[回到首页](./readme.md)

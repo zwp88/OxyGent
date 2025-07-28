@@ -140,3 +140,7 @@ def delete_file(path: str = Field(description="Path to the file to delete")) -> 
     return f"Successfully deleted the file at {path}"
 
 ```
+
+[上一章：选择智能体种类](./1_4_select_agent.md)
+[下一章：使用MCP开源工具](./2_3_use_opensource_tools.md)
+[回到首页](./readme.md)

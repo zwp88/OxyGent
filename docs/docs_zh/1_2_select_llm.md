@@ -83,3 +83,7 @@ OxyGent支持细致设置模型参数，您可以在调用时或者在[设置](.
 - **max_video_size**: 视频处理的最大字节数。
 
 OxyGent默认为每个agent提供单独的LLM。如果您需要配置统一的LLM，请参考[设置默认LLM](./3_set_config.md)；如果您需要并行运行多种LLM，请参考[并行](./7_parallel.md)。
+
+[上一章：和智能体交流](./1_1_chat_with_agent.md)
+[下一章：预设提示词](./1_3_select_prompt.md)
+[回到首页](./readme.md)

@@ -125,3 +125,7 @@ async def main():
 if __name__ == "__main__":
     asyncio.run(main())
 ```
+
+[上一章：管理工具调用](./2_2_manage_tools.md)
+[下一章：设置数据库](./3_1_set_database.md)
+[回到首页](./readme.md)

@@ -31,3 +31,7 @@ OxyGent只是智能体系统框架，本身不提供LLM服务。因此您需要�
 + 如果您有企业内部Slack，请直接联系OxyGent Core团队。
 
 OxyGent未来将提供更完整的社区服务。
+
+[上一章：安装OxyGent](./0_install.md)
+[下一章：创建第一个智能体](./1_register_single_agent.md)
+[回到首页](./readme.md)

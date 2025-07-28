@@ -50,3 +50,7 @@ from oxygent.prompts import MULTIMODAL_PROMPT
 > 因此在使用自定义 Prompt 之前，建议您先参考我们提供的默认 [Prompts](https://github.com/jd-opensource/OxyGent/blob/main/oxygent/prompts.py)，以便更好地理解如何解析大模型的输出以及如何进行工具调用或回答处理。
 
 > 我们也提供了传入您自定义解析函数的属性，以便更加灵活地处理输出。具体请您参考[处理智能体输出](./8_2_handle_output.md)。
+
+[上一章：选择智能体使用的LLM](./1_2_select_llm.md)
+[下一章：选择智能体种类](./1_4_select_agent.md)
+[回到首页](./readme.md)

@@ -70,3 +70,7 @@ async def main():
 if __name__ == "__main__":
     asyncio.run(main())
 ```
+
+[上一章：设置OxyGent Config](./3_set_config.md)
+[下一章：创建简单的多agent系统](./6_register_multi_agent.md)
+[回到首页](./readme.md)

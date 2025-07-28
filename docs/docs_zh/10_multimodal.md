@@ -124,3 +124,8 @@ if __name__ == "__main__":
 2. **`attachments`**：用于传入图像或其他附件。您可以提供 URL 或 Base64 编码的文件。
 3. **`get_env_var("DEFAULT_IMAGE_URL")`**：获取环境变量中定义的图像 URL，您也可以根据需要传入其他图像资源。
 
+
+[上一章：创建分布式系统](./11_dstributed.md)
+[下一章：检索增强生成(RAG)](./12_rag.md)
+[回到首页](./readme.md)
+

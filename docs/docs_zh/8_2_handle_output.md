@@ -133,3 +133,7 @@ def format_output(oxy_response: OxyResponse) -> OxyResponse:
 ### 说明
 1. **`func_parse_llm_response`**：用于将 LLM 的输出进行自定义解析。可以根据工具调用结果或普通文本的需求进行处理。
 2. **`func_format_output`**：该方法用于自定义 `oxy.Response` 的输出格式，帮助您控制最终结果的呈现方式。
+
+[上一章：处理查询和提示词](./8_update_prompts.md)
+[下一章：创建工作流](./9_workflow.md)
+[回到首页](./readme.md)

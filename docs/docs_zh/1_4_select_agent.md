@@ -78,3 +78,7 @@ ReActAgent包含一些独特的可调节参数，包括：
         permitted_tool_name_list=["text_summarizer", "data_analyser", "document_checker"]
     ),
 ```
+
+[上一章：预设提示词](./1_3_select_prompt.md)
+[下一章：注册一个工具](./2_register_single_tool.md)
+[回到首页](./readme.md)

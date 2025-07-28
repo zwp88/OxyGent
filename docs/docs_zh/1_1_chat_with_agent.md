@@ -74,3 +74,7 @@ if __name__ == "__main__":
 ```
 
 您可以阅读源代码以获取更多相关信息。
+
+[上一章：创建第一个智能体](./1_register_single_agent.md)
+[下一章：选择智能体使用的LLM](./1_2_select_llm.md)
+[回到首页](./readme.md)
