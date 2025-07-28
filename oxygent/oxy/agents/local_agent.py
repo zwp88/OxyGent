@@ -180,6 +180,10 @@ class LocalAgent(BaseAgent):
                 new_instance = copy.deepcopy(self)
                 new_instance.name = f"{self.name}_{i + 1}"
                 new_instance.is_master = False
+                new_instance.func_process_input = self.func_process_input
+                new_instance.func_process_output = self.func_process_output
+                new_instance.func_format_input = self.func_format_input
+                new_instance.func_format_output = self.func_format_output
                 team_names.append(new_instance.name)
                 self.mas.oxy_name_to_oxy[new_instance.name] = new_instance
             from .parallel_agent import ParallelAgent
