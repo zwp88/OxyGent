@@ -242,5 +242,4 @@ pyproject.toml*
 cache_dir/
 cache_dir_dev/
 local_file/
-docs/
 deployment/

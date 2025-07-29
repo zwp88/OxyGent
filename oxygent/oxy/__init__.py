@@ -2,13 +2,14 @@ from .agents import (
     ChatAgent,
     ParallelAgent,
     ReActAgent,
-    ReflexionAgent,
     SSEOxyGent,
     WorkflowAgent,
 )
 from .flows import (
     Workflow,
     PlanAndSolve,
+    Reflexion,
+    MathReflexion,
 )
 from .api_tools import HttpTool
 from .base_oxy import Oxy
@@ -33,6 +34,7 @@ __all__ = [
     "FunctionHub",
     "FunctionTool",
     "Workflow",
-    "ReflexionAgent",
     "PlanAndSolve",
+    "Reflexion",
+    "MathReflexion"
 ]
