@@ -112,7 +112,8 @@ async def image_to_base64(source: str, max_image_pixels: int = 10000000) -> str:
             return output.getvalue()
 
     image_bytes = await asyncio.to_thread(process_image, image_bytes)
-    return f"data:image;base64,{base64.b64encode(image_bytes).decode('utf-8')}"
+    ext = os.path.splitext(source)[-1][1: ]
+    return f"data:image/{ext};base64,{base64.b64encode(image_bytes).decode('utf-8')}"
 
 
 # 512 * 1024 * 1024 bytes == 512MB
@@ -121,7 +122,8 @@ async def video_to_base64(source: str, max_video_size: int = 512 * 1024 * 1024) 
     if len(video_bytes) > max_video_size:
         return source
     else:
-        return f"data:video;base64,{base64.b64encode(video_bytes).decode('utf-8')}"
+        ext = os.path.splitext(source)[-1][1: ]
+        return f"data:video/{ext};base64,{base64.b64encode(video_bytes).decode('utf-8')}"
 
 
 def append_url_path(url, path):

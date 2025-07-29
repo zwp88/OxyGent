@@ -84,6 +84,10 @@ class ReActAgent(LocalAgent):
         None, exclude=True, description="Function to parse LLM output"
     )
 
+    func_reflexion: Optional[Callable[[str, OxyRequest], str]] = Field(
+        None, exclude=True, description="Function to perform reflexion on responses"
+    )
+
     def __init__(self, **kwargs):
         """Initialize the ReAct agent with appropriate prompt and parsing function."""
         super().__init__(**kwargs)
@@ -95,9 +99,27 @@ class ReActAgent(LocalAgent):
         if self.func_parse_llm_response is None:
             self.func_parse_llm_response = self._parse_llm_response
 
-        # Add retrieve_tools if vector search is configured
+        if self.func_reflexion is None:
+            self.func_reflexion = self._default_reflexion
+
+        # Add retrieve_tools if vector search is conf igured
         if Config.get_vearch_config():
             self.tools.append("retrieve_tools")
+
+    def _default_reflexion(self, response: str, oxy_request: OxyRequest) -> str:
+        """Default reflexion function that checks if response is empty or invalid.
+        
+        Args:
+            response (str): The agent's response to evaluate
+            oxy_request (OxyRequest): The current request context
+            
+        Returns:
+            reflection_message (str): Feedback message for improvement (used when is_acceptable=False)
+        """
+        # Check if response is empty
+        if not response or len(response.strip()) == 0:
+            return "The response should not be empty. Please provide a more detailed and helpful answer."
+        return None
 
     async def _get_history(
         self, oxy_request: OxyRequest, is_get_user_master_session=False
@@ -211,7 +233,7 @@ class ReActAgent(LocalAgent):
                     short_memory.add_message(Message.assistant_message(short_a_message))
         return short_memory
 
-    def _parse_llm_response(self, ori_response: str) -> LLMResponse:
+    def _parse_llm_response(self, ori_response: str, oxy_request: OxyRequest = None) -> LLMResponse:
         """Parse LLM response to determine next action.
 
         This method handles various LLM output formats and determines whether
@@ -251,6 +273,13 @@ class ReActAgent(LocalAgent):
                     ori_response=ori_response,
                 )
             else:
+                reflection_msg = self.func_reflexion(ori_response, oxy_request)
+                if reflection_msg:
+                    return LLMResponse(
+                        state=LLMState.ERROR_PARSE,
+                        output=reflection_msg,
+                        ori_response=ori_response,
+                    )
                 return LLMResponse(
                     state=LLMState.ANSWER,
                     output=ori_response,
@@ -275,7 +304,7 @@ class ReActAgent(LocalAgent):
         Returns:
             OxyResponse: Final response with answer and ReAct memory trace.
         """
-        react_memory = Memory()
+        react_memory = Memory()        
         for current_round in range(self.max_react_rounds + 1):
             # Build complete message context: instruction + short memory + query + react memory
             temp_memory = Memory()
@@ -293,7 +322,7 @@ class ReActAgent(LocalAgent):
                 callee=self.llm_model,
                 arguments={"messages": temp_memory.to_dict_list()},
             )
-            llm_response = self.func_parse_llm_response(oxy_response.output)
+            llm_response = self.func_parse_llm_response(oxy_response.output, oxy_request)
 
             # Execute based on LLM decision
             if llm_response.state is LLMState.ANSWER:
@@ -343,7 +372,6 @@ class ReActAgent(LocalAgent):
                         "trust_mode" in llm_response.output
                         and llm_response.output["trust_mode"] == 1
                     ):
-                        # todo send_msg
                         return OxyResponse(
                             state=OxyState.COMPLETED,
                             output=observation.to_str(),

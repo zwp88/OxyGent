@@ -32,6 +32,7 @@
 + [提供响应元数据](./8_1_trust_mode.md)
 + [处理查询和提示词](./8_update_prompts.md)*
 + [处理LLM和智能体输出](./8_2_handle_output.md)
++ [反思重做模式](./8_3_reflexion.md)
 
 ## 流
 + [创建工作流](./9_workflow.md)*
