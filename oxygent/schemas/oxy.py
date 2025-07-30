@@ -33,6 +33,7 @@ class OxyState(Enum):  # The status of the node (oxy)
     SKIPPED = auto()
     CANCELED = auto()
 
+
 class OxyRequest(BaseModel):
     """Envelope for a single MAS task invocation.
 
@@ -109,11 +110,12 @@ class OxyRequest(BaseModel):
         fields = self.model_dump()
         # Quote messanger
         fields["mas"] = self.mas
+        fields["shared_data"] = self.shared_data
 
         fields["parallel_id"] = ""
         fields["latest_node_ids"] = []
         for k in fields:
-            if k not in ["mas", "parallel_id", "latest_node_ids"]:
+            if k not in ["mas", "shared_data", "parallel_id", "latest_node_ids"]:
                 fields[k] = copy.deepcopy(fields[k], memo)
         return self.__class__(**fields)
 
