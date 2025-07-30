@@ -64,7 +64,7 @@ class BaseAgent(BaseFlow):
                 ):
                     oxy_request.root_trace_ids = es_response["hits"]["hits"][0][
                         "_source"
-                    ]["root_trace_ids"].split("|")
+                    ]["root_trace_ids"]
                 else:
                     oxy_request.root_trace_ids = []
 
@@ -94,8 +94,8 @@ class BaseAgent(BaseFlow):
                     body={
                         "trace_id": oxy_request.current_trace_id,
                         "from_trace_id": oxy_request.from_trace_id,
-                        "root_trace_ids": "|".join(oxy_request.root_trace_ids),
-                        "input": to_json(oxy_request.arguments),
+                        "root_trace_ids": oxy_request.root_trace_ids,
+                        "input": oxy_request.arguments,
                         "callee": oxy_request.callee,
                         "output": "",  # Output will be filled in post_save_data
                         "create_time": get_format_time(),
@@ -126,7 +126,7 @@ class BaseAgent(BaseFlow):
                     body={
                         "trace_id": oxy_request.current_trace_id,
                         "from_trace_id": oxy_request.from_trace_id,
-                        "root_trace_ids": "|".join(oxy_request.root_trace_ids),
+                        "root_trace_ids": oxy_request.root_trace_ids,
                         "input": to_json(oxy_request.arguments),
                         "callee": oxy_request.callee,
                         "output": to_json(oxy_response.output),

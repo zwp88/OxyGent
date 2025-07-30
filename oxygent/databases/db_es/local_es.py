@@ -207,16 +207,12 @@ class LocalEs(BaseEs):
             bool_query = query["bool"]
             
             if "must" in bool_query:
-                musts = bool_query["must"]
-                filtered_docs = []
-                for doc in docs:
-                    match_all = True
-                    for cond in musts:
-                        if not self._match_single_condition(doc, cond):
-                            match_all = False
-                            break
-                    if match_all:
-                        filtered_docs.append(doc)
+                must_conditions = bool_query["must"]
+                filtered_docs = docs.copy()  
+                
+                for condition in must_conditions:
+                    filtered_docs = self._filter_docs(filtered_docs, condition)
+                
                 return filtered_docs
             
             if "should" in bool_query:
@@ -243,9 +239,9 @@ class LocalEs(BaseEs):
                 return filtered_docs
         
         return docs
-    
-    async def find_node_safe(es, index_name: str, trace_id: str, node_id: str):
-        result = await es.get_by_node_id(index_name, node_id)
+
+    async def find_node_safe(self, index_name: str, trace_id: str, node_id: str):
+        result = await self.get_by_node_id(index_name, node_id)
         if result:
             if result["_source"].get("trace_id") == trace_id:
                 return result
@@ -264,7 +260,7 @@ class LocalEs(BaseEs):
             "size": 1
         }
         
-        search_result = await es.search(index_name, compound_query)
+        search_result = await self.search(index_name, compound_query)
         hits = search_result.get("hits", {}).get("hits", [])
         return hits[0] if hits else None
     

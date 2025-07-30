@@ -103,13 +103,12 @@ async def main():
         }
         # second
         payload = {
-            "query": "Get what time it is in America/New_York and save in `log.txt` under `./local_file`",  # TODO: get from trace id
-            "from_trace_id": "",
-            "reference_trace_id": "CVu84yL8jbk3UwT6",  # TODO: get from node id
-            "restart_node_id": "gn7YBoKeTxr439ps",
+            "query": "Get what time it is in America/New_York and save in `log.txt` under `./local_file`",  
+            "from_trace_id": "", 
+            "restart_node_id": "6m8jX6xmQF4xXzpo",
             "restart_node_output": """{
                 "timezone": "America/New_York",
-                "datetime": "2024-07-21T05:32:43-04:00",
+                "datetime": "2024-07-21T05:39:43-04:00",
                 "is_dst": true
             }""",
         }
