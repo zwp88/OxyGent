@@ -220,9 +220,9 @@ async def get_task_info(item_id: str):
     )
     nodes = []
     for data in es_response["hits"]["hits"]:
-        data["_source"]["call_stack"] = data["_source"]["call_stack"].split("|")
-        data["_source"]["node_id_stack"] = data["_source"]["node_id_stack"].split("|")
-        data["_source"]["pre_node_ids"] = data["_source"]["pre_node_ids"].split("|")
+        data["_source"]["call_stack"] = data["_source"]["call_stack"]
+        data["_source"]["node_id_stack"] = data["_source"]["node_id_stack"]
+        data["_source"]["pre_node_ids"] = data["_source"]["pre_node_ids"]
         if (
             len(data["_source"]["pre_node_ids"]) == 1
             and data["_source"]["pre_node_ids"][0] == ""

@@ -197,28 +197,35 @@ class Oxy(BaseModel, ABC):
             and self.mas.es_client
             and self.category in ["llm", "tool"]
         ):
-            es_response = await self.mas.es_client.search(
-                Config.get_app_name() + "_node",
-                {
-                    "query": {
-                        "bool": {
-                            "must": [
-                                {
-                                    "term": {
-                                        "trace_id": oxy_request.reference_trace_id,
-                                    }
-                                },
-                                {
-                                    "term": {
-                                        "input_md5": oxy_request.input_md5,
-                                    }
-                                },
-                            ]
-                        }
+            if oxy_request.restart_node_id:
+                es_response = await self.mas.es_client.search(
+                    Config.get_app_name() + "_node",
+                    {
+                        "query": {
+                            "bool": {
+                                "must": [
+                                    {"term": {"node_id": oxy_request.restart_node_id}},
+                                ]
+                            }
+                        },
+                        "size": 1,
                     },
-                    "size": 10,
-                },
-            )
+                )
+            else:
+                es_response = await self.mas.es_client.search(
+                    Config.get_app_name() + "_node",
+                    {
+                        "query": {
+                            "bool": {
+                                "must": [
+                                    {"term": {"trace_id": oxy_request.reference_trace_id}},
+                                    {"term": {"input_md5": oxy_request.input_md5}},
+                                ]
+                            }
+                        },
+                        "size": 10,
+                    },
+                )
             if es_response["hits"]["hits"]:
                 current_node_order = es_response["hits"]["hits"][0]["_source"][
                     "update_time"
@@ -300,9 +307,9 @@ class Oxy(BaseModel, ABC):
                     "callee": callee_name,
                     "parallel_id": oxy_request.parallel_id,
                     "father_node_id": oxy_request.father_node_id,
-                    "call_stack": "|".join(oxy_request.call_stack),
-                    "node_id_stack": "|".join(oxy_request.node_id_stack),
-                    "pre_node_ids": "|".join(oxy_request.pre_node_ids),
+                    "call_stack": oxy_request.call_stack,
+                    "node_id_stack": oxy_request.node_id_stack,
+                    "pre_node_ids": oxy_request.pre_node_ids,
                     "create_time": get_format_time(),
                 },
             )

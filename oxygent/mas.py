@@ -598,21 +598,34 @@ class MAS(BaseModel):
 
             if (
                 "restart_node_id" in payload
-                and payload["reference_trace_id"]
-                and "restart_node_id" in payload
-                and payload["restart_node_id"]
+                and payload.get("restart_node_id")
             ):
                 es_response = await self.es_client.search(
                     Config.get_app_name() + "_node",
-                    {"query": {"term": {"_id": payload["restart_node_id"]}}},
+                    {
+                        "query": {"term": {"node_id": payload["restart_node_id"]}},
+                        "size": 1
+                    },
                 )
-                if (
-                    es_response["hits"]["hits"]
-                    and es_response["hits"]["hits"][0]["_source"]["trace_id"]
-                    == payload["reference_trace_id"]
-                ):
+                
+                if es_response["hits"]["hits"]:
                     restart_node_data = es_response["hits"]["hits"][0]["_source"]
-                    payload["restart_node_order"] = restart_node_data["update_time"]
+                    
+                    if payload.get("reference_trace_id"):
+                        if restart_node_data["trace_id"] == payload["reference_trace_id"]:
+                            payload["restart_node_order"] = restart_node_data["update_time"]
+                            logger.info(f"Found restart node {payload['restart_node_id']} with matching trace_id")
+                        else:
+                            logger.warning(
+                                f"Node {payload['restart_node_id']} found but trace_id mismatch: "
+                                f"expected {payload['reference_trace_id']}, got {restart_node_data['trace_id']}"
+                            )
+                    else:
+                        payload["restart_node_order"] = restart_node_data["update_time"]
+                        payload["reference_trace_id"] = restart_node_data["trace_id"]  # 自动设置
+                        logger.info(f"Found restart node {payload['restart_node_id']}, auto-set trace_id to {restart_node_data['trace_id']}")
+                else:
+                    logger.warning(f"Restart node {payload['restart_node_id']} not found in ES")
 
             oxy_request = OxyRequest(mas=self)
             oxy_request_fields = oxy_request.model_fields
