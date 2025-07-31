@@ -108,6 +108,7 @@ oxy_space = [
     oxy.ReActAgent(
         name="master_agent",
         sub_agents=["time_agent", "file_agent", "math_agent"],
+        additional_prompt="You may get several types of tasks, please choose correct tools to finish tasks.",
         is_master=True,
         func_format_output=format_output,
         timeout=100,
@@ -116,6 +117,7 @@ oxy_space = [
     oxy.ReActAgent(
         name="time_agent",
         desc="A tool for time query.",
+        additional_prompt="Do not send other information except time.",
         tools=["time"],
         func_process_input=update_query,
         trust_mode=False,

@@ -41,7 +41,7 @@ class TestBaseAgent:
         dummy_agent.mas.es_client.search.return_value = {
             "hits": {
                 "hits": [{
-                    "_source": {"root_trace_ids": "trace1|trace2"}
+                    "_source": {"root_trace_ids": ["trace1","trace2"]}
                 }]
             }
         }

@@ -60,7 +60,10 @@ class LocalAgent(BaseAgent):
         default_factory=Config.get_agent_prompt,
         description="Defaults to 'SYSTEM_PROMPT', the prompt to initialize the agent's behavior.",
     )
-
+    additional_prompt: Optional[str] = Field(
+        default="",
+        description="The prompt add by user, addit to the origin prompt."
+    )
     sub_agents: Optional[list] = Field(
         default_factory=list,
         description="Names of other agents this agent can delegate to (hierarchy support).",
@@ -385,8 +388,9 @@ class LocalAgent(BaseAgent):
             llm_tool_desc_list = await self._get_llm_tool_desc_list(
                 oxy_request, oxy_request.get_query()
             )
+        oxy_request.arguments["additional_prompt"] = self.additional_prompt
         oxy_request.arguments["tools_description"] = "\n\n".join(llm_tool_desc_list)
-
+        
         # multimodal support
         if self.is_multimodal_supported:
             query_attachments = process_attachments(

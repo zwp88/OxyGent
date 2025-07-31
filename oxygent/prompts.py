@@ -32,6 +32,7 @@ After receiving the tool's response:
 5. Avoid simply repeating the raw data
 
 Please only use the tools explicitly defined above.
+${additional_prompt}
 """
 
 SYSTEM_PROMPT_RETRIEVAL = """
@@ -74,7 +75,7 @@ After receiving the tool's response:
 5. Avoid simply repeating the raw data
 
 Tools for querying time can be obtained through retrieval tools.
-
+${additional_prompt}
 """
 
 INTENTION_PROMPT = """
