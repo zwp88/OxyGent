@@ -18,7 +18,7 @@
     oxy.ReActAgent(
         name="math_agent",
         desc="A tool that can do math calculates",
-        tools=["my_tools"],
+        tools=["math_tools"],
     ),
 ```
 
@@ -43,7 +43,7 @@ OxyGent 的智能体系统结构非常灵活，这意味着您可以注册多层
 import asyncio
 
 from oxygent import MAS, oxy, Config
-from oxygent.utils.env_utils import get_env_var
+import os
 import prompts
 import tools
 
@@ -52,9 +52,9 @@ Config.set_agent_llm_model("default_llm")
 oxy_space = [
     oxy.HttpLLM(
         name="default_llm",
-        api_key=get_env_var("DEFAULT_LLM_API_KEY"),
-        base_url=get_env_var("DEFAULT_LLM_BASE_URL"),
-        model_name=get_env_var("DEFAULT_LLM_MODEL_NAME"),
+        api_key=os.getenv("DEFAULT_LLM_API_KEY"),
+        base_url=os.getenv("DEFAULT_LLM_BASE_URL"),
+        model_name=os.getenv("DEFAULT_LLM_MODEL_NAME"),
         llm_params={"temperature": 0.01},
         semaphore=4,
         timeout=240,
@@ -67,10 +67,10 @@ oxy_space = [
         },
     ),
     oxy.StdioMCPClient(
-        name="my_tools",
+        name="math_tools",
         params={
             "command": "uv",
-            "args": ["--directory", "./mcp_servers", "run", "my_tools.py"],
+            "args": ["--directory", "./mcp_servers", "run", "math_tools.py"],
         },
     ),
     tools.file_tools,
@@ -87,7 +87,7 @@ oxy_space = [
     oxy.ReActAgent(
         name="math_agent",
         desc="A tool that can do math calculates",
-        tools=["my_tools"],
+        tools=["math_tools"],
     ),
     oxy.ReActAgent(
         name="master_agent",
@@ -108,6 +108,6 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-[上一章：设置数据库](./3_1_set_database.md)
+[上一章：设置全局数据](./3_2_set_global.md)
 [下一章：复制相同智能体](./6_1_moa.md)
 [回到首页](./readme.md)

@@ -8,11 +8,13 @@ and tool execution through the Model Context Protocol standard.
 import asyncio
 import logging
 from contextlib import AsyncExitStack
-from typing import Any
+from typing import Any, Dict
 
+import anyio
 from mcp import ClientSession
 from pydantic import Field
 
+from ...config import Config
 from ...schemas import OxyRequest, OxyResponse, OxyState
 from ..base_tool import BaseTool
 from .mcp_tool import MCPTool
@@ -32,6 +34,12 @@ class BaseMCPClient(BaseTool):
     """
 
     included_tool_name_list: list = Field(default_factory=list)
+    headers: Dict[str, str] = Field(
+        default_factory=dict, description="Extra HTTP headers"
+    )
+    is_dynamic_headers: bool = Field(False, description="is dynamic headers")
+    is_inherit_headers: bool = Field(False, description="is inherit headers")
+    is_keep_alive: bool = Field(default_factory=Config.get_tool_mcp_is_keep_alive)
 
     def __init__(self, **kwargs):
         """Initialize the MCP client with necessary resources.
@@ -48,18 +56,25 @@ class BaseMCPClient(BaseTool):
     async def list_tools(self) -> None:
         """Discover and register tools from the MCP server.
 
-        Connects to the MCP server, retrieves the list of available tools, and
-        dynamically creates MCPTool instances for each discovered tool. These tools are
-        then registered with the MAS for use by agents.
+        Connects to the MCP server, retrieves the list of available tools
         """
         if not self._session:
             raise RuntimeError(f"Server {self.name} not initialized")
 
         tools_response = await self._session.list_tools()
+        self.add_tools(tools_response)
 
+    def add_tools(self, tools_response) -> None:
+        """
+        dynamically creates MCPTool instances for each discovered tool. These tools are
+        then registered with the MAS for use by agents.
+        """
         params = self.model_dump(
             exclude={
                 "sse_url",
+                "server_url",
+                "headers",
+                "middlewares",
                 "included_tool_name_list",
                 "name",
                 "desc",
@@ -79,6 +94,12 @@ class BaseMCPClient(BaseTool):
                         mcp_client=self,
                         server_name=self.name,
                         input_schema=tool.inputSchema,
+                        func_process_input=self.func_process_input,
+                        func_process_output=self.func_process_output,
+                        func_format_input=self.func_format_input,
+                        func_format_output=self.func_format_output,
+                        func_execute=self.func_execute,
+                        func_interceptor=self.func_interceptor,
                         **params,
                     )
                     mcp_tool.set_mas(self.mas)
@@ -92,10 +113,39 @@ class BaseMCPClient(BaseTool):
         the MCP protocol.
         """
         tool_name = oxy_request.callee
-        if not self._session:
-            raise RuntimeError(f"Server {self.name} not initialized")
 
-        mcp_response = await self._session.call_tool(tool_name, oxy_request.arguments)
+        if not self.is_dynamic_headers and self.is_keep_alive:
+            if not self._session:
+                raise RuntimeError(f"Server {self.name} not initialized")
+
+            try:
+                mcp_response = await self._session.call_tool(
+                    tool_name, oxy_request.arguments
+                )
+            except anyio.ClosedResourceError:
+                await self.init(is_fetch_tools=False)  # TODO: refetch tools
+                mcp_response = await self._session.call_tool(
+                    tool_name, oxy_request.arguments
+                )
+        else:
+            if self.is_dynamic_headers:
+                _headers = (
+                    oxy_request.shared_data.get("_headers", {})
+                    if self.is_inherit_headers
+                    else {}
+                )
+                if "host" in _headers:
+                    del _headers["host"]
+                merged_headers = (
+                    self.headers | _headers | oxy_request.shared_data.get("headers", {})
+                )
+            else:
+                merged_headers = self.headers
+            mcp_response = await self.call_tool(
+                tool_name,
+                oxy_request.arguments,
+                headers=merged_headers,
+            )
         # TODO: Handle result objects and progress tracking
         results = [content.text.strip() for content in mcp_response.content]
         return OxyResponse(

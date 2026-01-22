@@ -3,7 +3,8 @@ Unit tests for Message & Memory classes
 """
 
 import pytest
-from oxygent.schemas.memory import Message, Memory, Function, ToolCall
+
+from oxygent.schemas.memory import Function, Memory, Message, ToolCall
 
 
 # ───────────────────────────────────────────────────────────────────────────────
@@ -31,7 +32,7 @@ def test_message_add_overloads():
     assert [m2] + m1 == [m2, m1]
 
     with pytest.raises(TypeError):
-        _ = m1 + 1  
+        _ = m1 + 1
 
 
 def test_message_to_dict_and_tool_calls():

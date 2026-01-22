@@ -12,14 +12,17 @@ NOTE: The variables difined in this file have meanings as:
 import asyncio
 import copy
 import logging
+import os
 import traceback
 from enum import Enum, auto
+from functools import partial
 from typing import Any, List, Optional, Union
 
-import shortuuid
 from pydantic import BaseModel, Field
 
 from ..config import Config
+from ..utils.common_utils import generate_uuid, is_image
+from .message import SSEMessage
 
 logger = logging.getLogger(__name__)
 
@@ -54,9 +57,17 @@ class OxyRequest(BaseModel):
     """
 
     # Static
+    request_id: str = Field(
+        default_factory=partial(generate_uuid, length=22),
+        description="Client-side id for tracing & resuming requests.",
+    )
+    group_id: str = Field(
+        default_factory=generate_uuid,
+        description="Static group identifier for trace trees.",
+    )
     from_trace_id: Optional[str] = Field("", description="")
     current_trace_id: Optional[str] = Field(
-        default_factory=lambda: shortuuid.ShortUUID().random(length=16), description=""
+        default_factory=generate_uuid, description=""
     )
     reference_trace_id: Optional[str] = Field("", description="")
     restart_node_id: Optional[str] = Field("", description="")
@@ -84,13 +95,23 @@ class OxyRequest(BaseModel):
     callee_category: Optional[str] = Field("", description="")
 
     node_id: Optional[str] = Field("", description="")
-    arguments: dict = Field(default_factory=dict)
 
     is_save_history: bool = Field(True, description="whether history is saved")
+    is_send_message: bool = Field(True, description="whether message is send")
+    is_async_storage: bool = Field(True, description="whether async storage is used")
 
-    shared_data: dict = Field(default_factory=dict)
     parallel_id: Optional[str] = Field("", description="")
     parallel_dict: Optional[dict] = Field(default_factory=dict, description="")
+
+    arguments: dict = Field(
+        default_factory=dict, description="public data in the scope of a oxy node"
+    )
+    shared_data: dict = Field(
+        default_factory=dict, description="public data in the scope of a single request"
+    )
+    group_data: dict = Field(
+        default_factory=dict, description="public data in the scope of a session group"
+    )
 
     @property
     def session_name(self) -> str:  # We use a easy method to create session name
@@ -108,16 +129,30 @@ class OxyRequest(BaseModel):
     def __deepcopy__(self, memo):
         # Dump all the fields into a dict
         fields = self.model_dump()
-        # Quote messanger
-        fields["mas"] = self.mas
-        fields["shared_data"] = self.shared_data
 
-        fields["parallel_id"] = ""
-        fields["latest_node_ids"] = []
+        # Quote messanger
+        temp_data = {
+            "mas": None,
+            "shared_data": dict(),
+            "group_data": dict(),
+            "parallel_id": "",
+            "latest_node_ids": [],
+        }
+        for k, v in temp_data.items():
+            fields[k] = v
         for k in fields:
-            if k not in ["mas", "shared_data", "parallel_id", "latest_node_ids"]:
+            if k not in temp_data:
                 fields[k] = copy.deepcopy(fields[k], memo)
-        return self.__class__(**fields)
+
+        # create new instance
+        new_instance = self.__class__(**fields)
+
+        # 直接赋值共享引用
+        new_instance.mas = self.mas
+        new_instance.shared_data = self.shared_data
+        new_instance.group_data = self.group_data
+
+        return new_instance
 
     def clone_with(self, **kwargs) -> "OxyRequest":
         """Return a deep copy with selected fields overridden.
@@ -200,9 +235,9 @@ class OxyRequest(BaseModel):
         """
         oxy_request = self.clone_with(**kwargs)
 
-        oxy_request.node_id = shortuuid.ShortUUID().random(length=16)
+        oxy_request.node_id = generate_uuid()
         if not oxy_request.parallel_id:
-            oxy_request.parallel_id = shortuuid.ShortUUID().random(length=16)
+            oxy_request.parallel_id = generate_uuid()
 
         if oxy_request.parallel_id in self.parallel_dict:
             self.parallel_dict[oxy_request.parallel_id]["parallel_node_ids"].append(
@@ -247,8 +282,7 @@ class OxyRequest(BaseModel):
             oxy_request.caller_category != "user"
             and oxy.is_permission_required
             and oxy_name
-            not in caller_oxy.permitted_tool_name_list
-            + caller_oxy.extra_permitted_tool_name_list
+            not in caller_oxy.permitted_tool_name_list + caller_oxy.permitted_oxy
         ):
             error_msg = (
                 f"No permission for oxy: {oxy_name}, caller: {oxy_request.caller}"
@@ -269,6 +303,14 @@ class OxyRequest(BaseModel):
             oxy_request.arguments["agent_name"] = caller_oxy.name
             oxy_request.arguments["top_k"] = caller_oxy.top_k_tools
             oxy_request.arguments["vearch_client"] = self.mas.vearch_client
+        system_arg_dict = {
+            "agent_pin": oxy_request.caller,
+            "user_pin": oxy_request.get_group_data("user_pin", ""),
+        }
+        for system_arg in oxy.system_args:
+            if system_arg in oxy_request.arguments:
+                continue
+            oxy_request.arguments[system_arg] = system_arg_dict[system_arg]
         # Execute the oxy
         try:
             oxy_response = await asyncio.wait_for(
@@ -317,15 +359,25 @@ class OxyRequest(BaseModel):
             )
         # return await self.retry_execute(oxy, oxy_request)
 
+    async def call_async(self, **kwargs):
+        task = asyncio.create_task(self.call(**kwargs))
+        self.mas.background_tasks.add(task)
+
     async def start(self) -> "OxyResponse":
         return await self.get_oxy(self.callee).execute(self)
 
-    async def send_message(self, message):
-        if self.mas and message:
+    async def send_message(self, message=None, event=None, id=None, retry=None):
+        if self.mas and self.is_send_message:
+            dict_message = {"id": id, "event": event, "data": message, "retry": retry}
+            dict_message_processed = self.mas.func_process_message(dict_message, self)
+            dict_message_filtered = {
+                k: v for k, v in dict_message_processed.items() if v is not None
+            }
+            sse_message = SSEMessage(**dict_message_filtered)
             redis_key = (
                 f"{self.mas.message_prefix}:{self.mas.name}:{self.current_trace_id}"
             )
-            await self.mas.send_message(message, redis_key)
+            await self.mas.send_message(sse_message, redis_key, group_id=self.group_id)
 
     def set_query(self, query, master_level=False):
         if master_level:
@@ -334,10 +386,23 @@ class OxyRequest(BaseModel):
             self.arguments["query"] = query
 
     def get_query(self, master_level=False):
+        md_attachments = []
+        for i, attachment in enumerate(self.arguments.get("attachments", [])):
+            if attachment.startswith("../static/"):
+                attachment = f"{Config.get_cache_save_dir()}/uploads{attachment[9:]}"
+            is_image_flag = "!" if is_image(attachment) else ""
+            attachment_base_name = os.path.basename(attachment)
+            md_attachments.append(
+                f"{is_image_flag}[{attachment_base_name}]({attachment})"
+            )
+        attachments_str = "\n".join(md_attachments)
+        if attachments_str:
+            attachments_str += " "
+
         if master_level:
-            return self.shared_data.get("query", "")
+            return attachments_str + self.shared_data.get("query", "")
         else:
-            return self.arguments.get("query", "")
+            return attachments_str + self.arguments.get("query", "")
 
     def has_short_memory(self, master_level=False):
         var_short_memory = "master_short_memory" if master_level else "short_memory"
@@ -350,6 +415,88 @@ class OxyRequest(BaseModel):
     def get_short_memory(self, master_level=False):
         var_short_memory = "master_short_memory" if master_level else "short_memory"
         return self.arguments.get(var_short_memory, [])
+
+    def get_request_id(self) -> str:
+        """Return the current request_id."""
+        return self.request_id
+
+    def set_request_id(self, request_id: str):
+        """Manually override the request_id (rarely needed)."""
+        self.request_id = request_id
+
+    def get_group_id(self) -> str:
+        """Return the group_id associated with this request."""
+        return self.group_id
+
+    def set_group_id(self, request_id: str):
+        """Manually override the group_id."""
+        self.group_id = request_id
+
+    def has_arguments(self, key):
+        return key in self.arguments
+
+    def get_arguments(self, key=None, default=None):
+        if key is None:
+            return self.arguments
+        return self.arguments.get(key, default)
+
+    def set_arguments(self, key, value):
+        self.arguments[key] = value
+
+    def has_shared_data(self, key):
+        return key in self.shared_data
+
+    def get_shared_data(self, key=None, default=None):
+        if key is None:
+            return self.shared_data
+        return self.shared_data.get(key, default)
+
+    def set_shared_data(self, key, value):
+        self.shared_data[key] = value
+
+    def has_group_data(self, key):
+        return key in self.group_data
+
+    def get_group_data(self, key=None, default=None):
+        if key is None:
+            return self.group_data
+        return self.group_data.get(key, default)
+
+    def set_group_data(self, key, value):
+        self.group_data[key] = value
+
+    def has_global_data(self, key):
+        return key in self.mas.global_data
+
+    def get_global_data(self, key=None, default=None):
+        if key is None:
+            return self.mas.global_data
+        return self.mas.global_data.get(key, default)
+
+    def set_global_data(self, key, value):
+        self.mas.global_data[key] = value
+
+    async def break_task(self):
+        await self.send_message(message="done", event="close")
+        self.mas.active_tasks[self.current_trace_id].cancel()
+
+    async def get_feedback_stream(self, channel_id=None):
+        if channel_id is None:
+            channel_id = self.current_trace_id
+        if channel_id not in self.mas.feedback_dict:
+            self.mas.feedback_dict[channel_id] = asyncio.Queue()
+            # 存储当前trace_id用到的所有channel_id
+            if self.current_trace_id not in self.mas.channel_id_dict:
+                self.mas.channel_id_dict[self.current_trace_id] = []
+            self.mas.channel_id_dict[self.current_trace_id].append(channel_id)
+        queue = self.mas.feedback_dict[channel_id]
+        while True:
+            data = await queue.get()
+            if not data:
+                queue.task_done()
+                break
+            yield data
+            queue.task_done()
 
 
 class OxyResponse(BaseModel):

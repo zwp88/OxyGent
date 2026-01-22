@@ -5,13 +5,13 @@ OxyGent所指的LLM是传统的LLM形式，它支持输入一个字符串并输�
 ## 调用一般模型
 
 ```python
-    from oxygent.utils.env_utils import get_env_var
+    import os
 
     oxy.HttpLLM(
         name="default_llm",
-        api_key=get_env_var("DEFAULT_LLM_API_KEY"), # 或者使用 os.getenv("DEFAULT_LLM_API_KEY")
-        base_url=get_env_var("DEFAULT_LLM_BASE_URL"),
-        model_name=get_env_var("DEFAULT_LLM_MODEL_NAME"),
+        api_key=os.getenv("DEFAULT_LLM_API_KEY"),
+        base_url=os.getenv("DEFAULT_LLM_BASE_URL"),
+        model_name=os.getenv("DEFAULT_LLM_MODEL_NAME"),
         llm_params={"temperature": 0.01},
         semaphore=4, # 并发量
         timeout=240, # 最大执行时间
@@ -28,9 +28,9 @@ OxyGent所指的LLM是传统的LLM形式，它支持输入一个字符串并输�
 ```python
     oxy.OpenAILLM(
         name="default_llm",
-        api_key=get_env_var("DEFAULT_LLM_API_KEY"), # 或者使用 os.getenv("DEFAULT_LLM_API_KEY")
-        base_url=get_env_var("DEFAULT_LLM_BASE_URL"),
-        model_name=get_env_var("DEFAULT_LLM_MODEL_NAME"),
+        api_key=os.getenv("DEFAULT_LLM_API_KEY"),
+        base_url=os.getenv("DEFAULT_LLM_BASE_URL"),
+        model_name=os.getenv("DEFAULT_LLM_MODEL_NAME"),
         llm_params={"temperature": 0.01},
         semaphore=4,
         timeout=240,
@@ -46,7 +46,7 @@ OxyGent所指的LLM是传统的LLM形式，它支持输入一个字符串并输�
         name="local_gemma",  
         # 注意不要传入api_key参数
         base_url="http://localhost:11434/api/chat", # 替换为本地的url接口
-        model_name=get_env_var("DEFAULT_OLLAMA_MODEL"),   
+        model_name=os.getenv("DEFAULT_OLLAMA_MODEL"),   
         llm_params={"temperature": 0.2},    
         semaphore=1,              
         timeout=240,
@@ -56,9 +56,10 @@ OxyGent所指的LLM是传统的LLM形式，它支持输入一个字符串并输�
 
 OxyGent支持自动补全url，补全逻辑简要如下：
 ```python
-        use_openai = self.api_key is not None
-        url = self.base_url.rstrip("/")
-        if use_openai:
+        if is_gemini:                                                    
+            if not url.endswith(":generateContent"):
+                url = f"{url}/models/{self.model_name}:generateContent"
+        elif use_openai:
             if not url.endswith("/chat/completions"):
                 url = f"{url}/chat/completions"
         else:
@@ -66,6 +67,7 @@ OxyGent支持自动补全url，补全逻辑简要如下：
                 url = f"{url}/api/chat"
 ```
 因此，请您注意以下内容，如果您遇到404问题，大概率是url错误导致的：
+- 使用Gemini是可以直接传入模型api，例如`https://generativelanguage.googleapis.com/v1beta`
 - 使用通用开源模型（DeepSeek, Qwen）时，即使api_key为EMPTY，也请您写在环境变量中并传入`oxy.HttpLLM`。
 - 使用基于OpenAI协议的闭源模型（ChatGPT）时，请使用`oxy.OpenAILLM`。
 - 使用ollama模型时，不要传入`api_key`参数。

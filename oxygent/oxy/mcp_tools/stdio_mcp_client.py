@@ -32,6 +32,7 @@ class StdioMCPClient(BaseMCPClient):
     """
 
     params: dict[str, Any] = Field(default_factory=dict)
+
     async def _ensure_directories_exist(self, args: list[str]) -> None:
         """Ensure required directories exist before starting MCP server."""
         if len(args) >= 2 and "server-filesystem" in " ".join(args):
@@ -42,13 +43,13 @@ class StdioMCPClient(BaseMCPClient):
                     logger.info(f"Created directory: {target_dir}")
                 except Exception as e:
                     logger.warning(f"Could not create directory {target_dir}: {e}")
-        
+
         if args[0] == "--directory" and args[2] == "run":
             mcp_tool_file = os.path.join(args[1], args[3])
             if not os.path.exists(mcp_tool_file):
                 raise FileNotFoundError(f"{mcp_tool_file} does not exist.")
 
-    async def init(self) -> None:
+    async def init(self, is_fetch_tools=True) -> None:
         """Initialize the stdio connection to the MCP server process.
 
         Spawns an external process (such as a Node.js script) that acts as an MCP server,
@@ -61,6 +62,37 @@ class StdioMCPClient(BaseMCPClient):
         3. Sets up environment variables
         4. Establishes stdio transport and session
         """
+
+        try:
+            server_params = await self.get_server_params()
+            stdio_transport = await self._exit_stack.enter_async_context(
+                stdio_client(server_params)
+            )
+            read, write = stdio_transport
+            self._session = await self._exit_stack.enter_async_context(
+                ClientSession(read, write)
+            )
+            await self._session.initialize()
+            if is_fetch_tools:
+                await self.list_tools()
+        except FileNotFoundError as e:
+            # Re-raise specific validation errors without wrapping
+            logger.error(f"Validation error for server {self.name}: {e}")
+            await self.cleanup()
+            raise
+        except Exception as e:
+            logger.error(f"Error initializing server {self.name}: {e}")
+            await self.cleanup()
+            raise Exception(f"Server {self.name} error")
+
+    async def call_tool(self, tool_name, arguments, headers=None):
+        server_params = await self.get_server_params()
+        async with stdio_client(server_params) as streams:
+            async with ClientSession(*streams) as session:
+                await session.initialize()
+                return await session.call_tool(tool_name, arguments)
+
+    async def get_server_params(self):
         command = (
             shutil.which("npx")
             if self.params["command"] == "npx"
@@ -82,18 +114,4 @@ class StdioMCPClient(BaseMCPClient):
             if self.params.get("env")
             else {**os.environ},
         )
-        try:
-            stdio_transport = await self._exit_stack.enter_async_context(
-                stdio_client(server_params)
-            )
-            read, write = stdio_transport
-            self._session = await self._exit_stack.enter_async_context(
-                ClientSession(read, write)
-            )
-            await self._session.initialize()
-            await self.list_tools()
-        except Exception as e:
-            logger.error(f"Error initializing server {self.name}: {e}")
-            await self.cleanup()
-            raise Exception(f"Server {self.name} error")
-
+        return server_params

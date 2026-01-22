@@ -10,7 +10,7 @@ from oxygent.schemas import OxyRequest, OxyResponse, OxyState
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# ❶ Dummy 
+# ❶ Dummy
 # ──────────────────────────────────────────────────────────────────────────────
 class DummyRemoteAgent(RemoteAgent):
     async def _execute(self, oxy_request: OxyRequest) -> OxyResponse:
@@ -61,7 +61,7 @@ def test_server_url_validation():
         DummyRemoteAgent(
             name="bad_remote",
             desc="bad",
-            server_url="ftp://foo.com",  
+            server_url="ftp://foo.com",
         )
 
 

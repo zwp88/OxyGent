@@ -6,7 +6,6 @@ import re
 
 from oxygent import MAS, oxy
 
-
 sft_prompt = """
     **Your Task**
     Act as a strict **SFT data reviewer**. Each time, you will evaluate **a single sample**, which includes:

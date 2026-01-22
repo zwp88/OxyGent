@@ -6,6 +6,9 @@ such as retry mechanisms and error handling for database operations.
 
 import asyncio
 import functools
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class BaseDB:
@@ -48,7 +51,8 @@ class BaseDB:
                         return await func(
                             *args, **kwargs
                         )  # Attempt to execute the original function
-                    except Exception:
+                    except Exception as e:
+                        logger.error(e)
                         retries += 1
                         if retries < max_retries:
                             await asyncio.sleep(

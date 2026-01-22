@@ -7,7 +7,7 @@ OxyGent MAS支持操作简单的分布式调用。您可以使用`oxy.SSEOxyGent
 ```python
 # app_time_agent.py
 from oxygent import MAS, Config, oxy
-from oxygent.utils.env_utils import get_env_var
+import os
 
 Config.set_app_name("app-time")
 Config.set_server_port(8082) # 替换为实际端口
@@ -15,14 +15,14 @@ Config.set_server_port(8082) # 替换为实际端口
 oxy_space = [
     oxy.HttpLLM(
         name="default_name",
-        api_key=get_env_var("DEFAULT_LLM_API_KEY"),
-        base_url=get_env_var("DEFAULT_LLM_BASE_URL"),
-        model_name=get_env_var("DEFAULT_LLM_MODEL_NAME"),
+        api_key=os.getenv("DEFAULT_LLM_API_KEY"),
+        base_url=os.getenv("DEFAULT_LLM_BASE_URL"),
+        model_name=os.getenv("DEFAULT_LLM_MODEL_NAME"),
         llm_params={"temperature": 0.01},
         semaphore=4,
     ),
     oxy.StdioMCPClient(
-        name="time",
+        name="time_tools",
         params={
             "command": "uvx",
             "args": ["mcp-server-time", "--local-timezone=Asia/Shanghai"],
@@ -32,7 +32,7 @@ oxy_space = [
         name="time_agent",
         desc="A tool for time query",
         is_master=True,
-        tools=["time"],
+        tools=["time_tools"],
         llm_model="default_name",
         timeout=10,
     ),
@@ -131,7 +131,7 @@ main "$@"
 import asyncio
 
 from oxygent import MAS, oxy, Config, OxyRequest
-from oxygent.utils.env_utils import get_env_var
+import os
 import prompts
 import tools
 
@@ -148,9 +148,9 @@ def update_query(oxy_request: OxyRequest):
 oxy_space = [
     oxy.HttpLLM(
         name="default_llm",
-        api_key=get_env_var("DEFAULT_LLM_API_KEY"),
-        base_url=get_env_var("DEFAULT_LLM_BASE_URL"),
-        model_name=get_env_var("DEFAULT_LLM_MODEL_NAME"),
+        api_key=os.getenv("DEFAULT_LLM_API_KEY"),
+        base_url=os.getenv("DEFAULT_LLM_BASE_URL"),
+        model_name=os.getenv("DEFAULT_LLM_MODEL_NAME"),
         llm_params={"temperature": 0.01},
         semaphore=4,
         timeout=240,
@@ -201,7 +201,7 @@ oxy_space = [
     oxy.ReActAgent(
         name="master_agent",
         is_master=True,
-        sub_agents=["file_agent","time_agent","analyzer"],
+        sub_agents=["file_agent", "time_agent", "analyzer"],
     ),
 ]
 

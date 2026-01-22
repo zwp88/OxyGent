@@ -42,10 +42,10 @@ def test_add_post_and_child_missing_pre():
         {"node_id": "X", "pre_node_ids": ["no_exist"], "father_node_id": ""},
         {"node_id": "Y", "pre_node_ids": ["X"], "father_node_id": "no_exist"},
     ]
-    add_post_and_child_node_ids(nodes)  
+    add_post_and_child_node_ids(nodes)
     x = nodes[0]
-    assert x["post_node_ids"] == ["Y"]          
-    assert x["child_node_ids"] == []           
+    assert x["post_node_ids"] == ["Y"]
+    assert x["child_node_ids"] == []
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -70,7 +70,7 @@ def test_build_tree_with_parallel_groups():
     """
     root
       ├─ a (order1)
-      ├─ [b,c] parallel 
+      ├─ [b,c] parallel
       └─ d (order4)
     """
     input_nodes = [

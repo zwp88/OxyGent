@@ -24,6 +24,7 @@
 ## 设置
 + [设置OxyGent Config](./3_set_config.md)*
 + [设置数据库](./3_1_set_database.md)
++ [设置全局数据](./3_2_set_global.md)
 
 ## 多智能体系统
 + [创建简单的多agent系统](./6_register_multi_agent.md)*
@@ -42,6 +43,7 @@
 
 ## 多模态
 + [使用多模态智能体](./10_multimodal.md)*
++ [导入附件](./10_1_attachments.md)
 
 ## 动态模型功能
 + [检索增强生成(RAG)](./12_rag.md)*

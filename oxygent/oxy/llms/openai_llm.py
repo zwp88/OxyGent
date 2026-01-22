@@ -38,24 +38,12 @@ class OpenAILLM(RemoteLLM):
             OxyResponse: The response containing the model's output with COMPLETED state.
         """
         # Construct payload for OpenAI API request
-        llm_config = {
-            k: v
-            for k, v in Config.get_llm_config().items()
-            if k
-            not in {
-                "cls",
-                "base_url",
-                "api_key",
-                "name",
-                "model_name",
-            }
-        }
         payload = {
             "messages": await self._get_messages(oxy_request),
             "model": self.model_name,
-            "stream": False,
+            "stream": True,
         }
-        payload.update(llm_config)
+        payload.update(Config.get_llm_config(exclude=["semaphore", "timeout"]))
         for k, v in self.llm_params.items():
             payload[k] = v
         for k, v in oxy_request.arguments.items():
@@ -68,6 +56,66 @@ class OpenAILLM(RemoteLLM):
             base_url=self.base_url,
         )
         completion = await client.chat.completions.create(**payload)
-        return OxyResponse(
-            state=OxyState.COMPLETED, output=completion.choices[0].message.content
-        )
+        if payload["stream"]:
+            answer = ""
+            think_start = True
+            think_end = False
+            async for chunk in completion:
+                if hasattr(chunk.choices[0].delta, "reasoning_content"):
+                    if think_start:
+                        await oxy_request.send_message(
+                            {
+                                "type": "stream",
+                                "content": {
+                                    "delta": "<think>",
+                                    "agent": oxy_request.caller,
+                                    "node_id": oxy_request.node_id,
+                                },
+                            }
+                        )
+                        answer += "<think>"
+                        think_start = False
+                        think_end = True
+                    char = chunk.choices[0].delta.reasoning_content
+                elif hasattr(chunk.choices[0].delta, "content"):
+                    if think_end:
+                        await oxy_request.send_message(
+                            {
+                                "type": "stream",
+                                "content": {
+                                    "delta": "</think>",
+                                    "agent": oxy_request.caller,
+                                    "node_id": oxy_request.node_id,
+                                },
+                            }
+                        )
+                        answer += "</think>"
+                        think_end = False
+                    char = chunk.choices[0].delta.content
+                if char:
+                    answer += char
+                    await oxy_request.send_message(
+                        {
+                            "type": "stream",
+                            "content": {
+                                "delta": char,
+                                "agent": oxy_request.caller,
+                                "node_id": oxy_request.node_id,
+                            },
+                        }
+                    )
+            await oxy_request.send_message(
+                {
+                    "type": "stream_end",
+                    "content": {
+                        "delta": "",
+                        "agent": oxy_request.caller,
+                        "node_id": oxy_request.node_id,
+                    },
+                }
+            )
+            return OxyResponse(state=OxyState.COMPLETED, output=answer)
+        else:
+            return OxyResponse(
+                state=OxyState.COMPLETED, output=completion.choices[0].message.content
+            )

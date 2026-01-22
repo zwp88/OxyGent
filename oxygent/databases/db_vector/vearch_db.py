@@ -133,23 +133,6 @@ class VectorToolAsync(object):
             return response.text
 
     @staticmethod
-    async def view_space(db_name, space_name, master_url):
-        """Get space information and configuration.
-
-        Args:
-            db_name: Name of the database
-            space_name: Name of the space
-            master_url: URL of the Vearch master node
-
-        Returns:
-            Dict[str, Any]: JSON response containing space details
-        """
-        url = f"{master_url}/space/{db_name}/{space_name}"
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url)
-            return response.json()
-
-    @staticmethod
     async def check_info(db_name, space_name, master_url):
         """Check space information and status.
 
@@ -367,7 +350,7 @@ class VearchDB(BaseVectorDB):
                    space names, and optional embedding model configuration
 
         NOTE:
-            If 'tool_df_space_name' is not in config, this is not a system-level instance.
+            If 'tool_space_name' is not in config, this is not a system-level instance.
             System usage must provide this configuration.
         """
         self.config = VearchConfig(config)
@@ -375,7 +358,7 @@ class VearchDB(BaseVectorDB):
         # Low level operations are not provided in this class
 
         if (
-            "tool_df_space_name" not in config
+            "tool_space_name" not in config
         ):  # Not a system instance; the config should be provided in system instance
             pass
 
@@ -399,7 +382,7 @@ class VearchDB(BaseVectorDB):
         )
         return res
 
-    async def create_tool_df_space(self, tool_df_space_name):
+    async def create_tool_df_space(self, tool_space_name):
         """Create system-specific tool dataframe space with predefined schema.
 
         This method creates a specialized space for storing tool information
@@ -407,11 +390,11 @@ class VearchDB(BaseVectorDB):
         for filtering by application and agent names.
 
         Args:
-            tool_df_space_name: Name of the tool space to create
+            tool_space_name: Name of the tool space to create
         """
         # System-specific space configuration for tool storage
         space_config0 = {
-            "name": tool_df_space_name,
+            "name": tool_space_name,
             "partition_num": 1,
             "replica_num": 3,
             "engine": {
@@ -580,8 +563,8 @@ class VearchDB(BaseVectorDB):
             tool_list = [('app_test3', 'agent_test3', 'tool_test3', 'tool_desc_test3')]
         """
         # Create system table if not exist
-        if not await self.check_space_exist(self.config.tool_df_space_name):
-            await self.create_tool_df_space()
+        if not await self.check_space_exist(self.config.tool_space_name):
+            await self.create_tool_df_space(self.config.tool_space_name)
 
         df = pd.DataFrame(
             tool_list, columns=["app_name", "agent_name", "tool_name", "tool_desc"]
@@ -643,7 +626,7 @@ class VearchDB(BaseVectorDB):
         # Perform bulk insert
         res = await self.vearch_tools.insert_batch(
             self.config.db_name,
-            self.config.tool_df_space_name,
+            self.config.tool_space_name,
             self.config.router_url,
             items,
         )
@@ -662,7 +645,7 @@ class VearchDB(BaseVectorDB):
         for doc_id in ids:
             await self.vearch_tools.delete_by_docid(
                 self.config.db_name,
-                self.config.tool_df_space_name,
+                self.config.tool_space_name,
                 self.config.router_url,
                 doc_id,
             )
@@ -688,7 +671,7 @@ class VearchDB(BaseVectorDB):
         }
         resp = await self.vearch_tools.search_by_filter(
             self.config.db_name,
-            self.config.tool_df_space_name,
+            self.config.tool_space_name,
             self.config.router_url,
             search_query,
         )
@@ -729,7 +712,7 @@ class VearchDB(BaseVectorDB):
         # Perform filtered similarity search
         resp = await self.vearch_tools.filter_and_emb_search(
             self.config.db_name,
-            self.config.tool_df_space_name,
+            self.config.tool_space_name,
             self.config.router_url,
             emb,
             top_k,

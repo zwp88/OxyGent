@@ -62,7 +62,7 @@ from oxygent.prompts import MULTIMODAL_PROMPT
         name="time_agent",
         desc="A tool for time query.",
         additional_prompt="Do not send other information except time.",
-        tools=["time"],
+        tools=["time_tools"],
     ),
 ```
 

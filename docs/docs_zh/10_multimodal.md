@@ -9,9 +9,9 @@ OxyGent 当前版本支持图片和视频的多模态输入。通过多模态，
 ```python
 oxy.HttpLLM(
     name="default_vlm",
-    api_key=get_env_var("DEFAULT_VLM_API_KEY"),
-    base_url=get_env_var("DEFAULT_VLM_BASE_URL"),
-    model_name=get_env_var("DEFAULT_VLM_MODEL_NAME"),
+    api_key=os.getenv("DEFAULT_VLM_API_KEY"),
+    base_url=os.getenv("DEFAULT_VLM_BASE_URL"),
+    model_name=os.getenv("DEFAULT_VLM_MODEL_NAME"),
     llm_params={"temperature": 0.6, "max_tokens": 2048},
     max_pixels=10000000,  # 设置最大像素大小
     is_multimodal_supported=True,  # 开启多模态支持
@@ -29,7 +29,7 @@ async with MAS(oxy_space=oxy_space) as mas:
     """单轮对话"""
     payload = {
         "query": "What is it in the picture?",  # 提问
-        "attachments": [get_env_var("DEFAULT_IMAGE_URL")],  # 传入图片附件
+        "attachments": ["http://image.jd.com/123.jpg"],  # 传入图片附件
     }
     oxy_response = await mas.chat_with_agent(payload=payload)
     print("LLM: ", oxy_response.output)
@@ -45,7 +45,7 @@ async with MAS(oxy_space=oxy_space) as mas:
 import asyncio
 
 from oxygent import MAS, Config, OxyRequest, OxyResponse, oxy
-from oxygent.utils.env_utils import get_env_var
+import os
 
 # 设置 LLM 模型
 Config.set_agent_llm_model("default_vlm")
@@ -76,9 +76,9 @@ async def master_workflow(oxy_request: OxyRequest) -> OxyResponse:
 oxy_space = [
     oxy.HttpLLM(
         name="default_vlm",
-        api_key=get_env_var("DEFAULT_VLM_API_KEY"),
-        base_url=get_env_var("DEFAULT_VLM_BASE_URL"),
-        model_name=get_env_var("DEFAULT_VLM_MODEL_NAME"),
+        api_key=os.getenv("DEFAULT_VLM_API_KEY"),
+        base_url=os.getenv("DEFAULT_VLM_BASE_URL"),
+        model_name=os.getenv("DEFAULT_VLM_MODEL_NAME"),
         llm_params={"temperature": 0.6, "max_tokens": 2048},
         max_pixels=10000000,  # 设置最大像素数
         is_multimodal_supported=True,  # 开启多模态支持
@@ -108,7 +108,7 @@ async def main():
         """单轮对话"""
         payload = {
             "query": "What is it in the picture?",
-            "attachments": [get_env_var("DEFAULT_IMAGE_URL")],  # 传入图片 URL
+            "attachments": ["http://image.jd.com/123.jpg"],  # 传入图片 URL
         }
         oxy_response = await mas.chat_with_agent(payload=payload)
         print("LLM: ", oxy_response.output)
@@ -122,10 +122,9 @@ if __name__ == "__main__":
 
 1. **`is_multimodal_supported=True`**：启用多模态支持，允许您将图像、视频等附件作为输入。
 2. **`attachments`**：用于传入图像或其他附件。您可以提供 URL 或 Base64 编码的文件。
-3. **`get_env_var("DEFAULT_IMAGE_URL")`**：获取环境变量中定义的图像 URL，您也可以根据需要传入其他图像资源。
 
 
 [上一章：创建分布式系统](./11_dstributed.md)
-[下一章：检索增强生成(RAG)](./12_rag.md)
+[下一章：导入附件](./10_1_attachments.md)
 [回到首页](./readme.md)
 

@@ -15,8 +15,10 @@ from typing import Optional
 from pydantic import Field
 
 from ...config import Config
+from ...live_prompt.manager import get_dynamic_prompt
 from ...schemas import Memory, Message, OxyRequest, OxyResponse
-from ...utils.common_utils import process_attachments
+from ..bank_tools.bank_client import BankClient
+from ..bank_tools.bank_tool import BankTool
 from ..base_tool import BaseTool
 from ..function_tools.function_hub import FunctionHub
 from ..function_tools.function_tool import FunctionTool
@@ -60,10 +62,19 @@ class LocalAgent(BaseAgent):
         default_factory=Config.get_agent_prompt,
         description="Defaults to 'SYSTEM_PROMPT', the prompt to initialize the agent's behavior.",
     )
-    additional_prompt: Optional[str] = Field(
-        default="",
-        description="The prompt add by user, addit to the origin prompt."
+    prompt_key: Optional[str] = Field(
+        default=None,
+        description="Key for live prompt lookup. Defaults to '{agent_name}_prompt' if not specified. Used for dynamic prompt hot-reloading.",
     )
+    use_live_prompt: bool = Field(
+        default_factory=Config.get_live_prompt_is_active,
+        description="Whether to use live prompt system. If False, only uses the static 'prompt' parameter from code.",
+    )
+    additional_prompt: Optional[str] = Field(
+        default="", description="The prompt add by user, addit to the origin prompt."
+    )
+    _resolved_prompt: Optional[str] = None
+    tools_placeholder: str = Field("tools_description")
     sub_agents: Optional[list] = Field(
         default_factory=list,
         description="Names of other agents this agent can delegate to (hierarchy support).",
@@ -73,6 +84,10 @@ class LocalAgent(BaseAgent):
     )
     except_tools: Optional[list] = Field(
         default_factory=list, description="Tools explicitly forbidden to this agent."
+    )
+
+    banks: Optional[list] = Field(
+        default_factory=list, description="Banks available to this agent."
     )
 
     is_sourcing_tools: bool = Field(
@@ -90,7 +105,8 @@ class LocalAgent(BaseAgent):
     )
 
     short_memory_size: int = Field(
-        10, description="Number of short-term memory entries to retain"
+        default_factory=Config.get_agent_short_memory_size,
+        description="Number of short-term memory entries to retain",
     )
     intent_understanding_agent: Optional[str] = Field(
         None,
@@ -98,6 +114,9 @@ class LocalAgent(BaseAgent):
     )
     is_retain_master_short_memory: bool = Field(
         False, description="Whether to retrieve user history"
+    )
+    is_attachment_processing_enabled: bool = Field(
+        True, description="Whether to inject attachments into `query`."
     )
 
     is_multimodal_supported: bool = Field(
@@ -146,6 +165,17 @@ class LocalAgent(BaseAgent):
                     self.add_permitted_tool(tool_name)
             else:
                 logger.warning(f"Unknown tool type: {type(oxy)}")
+        for oxy_name in set(self.banks):
+            if oxy_name not in self.mas.oxy_name_to_oxy:
+                raise Exception(f"bank [{oxy_name}] not exists.")
+            oxy = self.mas.oxy_name_to_oxy[oxy_name]
+            if isinstance(oxy, BankTool):
+                self.add_permitted_tool(oxy_name)
+            elif isinstance(oxy, BankClient):
+                for tool_name in oxy.included_bank_name_list:
+                    self.add_permitted_tool(tool_name)
+            else:
+                logger.warning(f"Unknown bank type: {type(oxy)}")
 
     def __deepcopy__(self, memo):
         # Extract all fields from the current instance
@@ -160,22 +190,90 @@ class LocalAgent(BaseAgent):
                 fields[k] = copy.deepcopy(fields[k], memo)
         return self.__class__(**fields)
 
+    async def reload_prompt(self) -> bool:
+        """Reload prompt from live prompt system (hot reload support).
+
+        This method re-fetches the prompt from storage, enabling hot updates
+        without restarting the agent. Useful when prompts are modified in the
+        management platform.
+
+        Returns:
+            bool: True if prompt was successfully reloaded, False otherwise.
+        """
+        # Check if live prompt is enabled
+        if not self.use_live_prompt:
+            logger.debug(
+                f"Agent '{self.name}' has live prompt disabled, skipping reload"
+            )
+            return False
+
+        try:
+            fallback = self.prompt if self.prompt else ""
+            new_prompt = await get_dynamic_prompt(self.prompt_key, fallback)
+
+            if new_prompt != self._resolved_prompt:
+                self._resolved_prompt = new_prompt
+                logger.info(
+                    f"Agent '{self.name}' prompt hot-reloaded via key '{self.prompt_key}': {len(self._resolved_prompt)} chars"
+                )
+                return True
+            else:
+                logger.debug(f"Agent '{self.name}' prompt unchanged")
+                return True
+        except Exception as e:
+            logger.error(
+                f"Failed to reload prompt for agent '{self.name}' with key '{self.prompt_key}': {e}"
+            )
+            return False
+
     async def init(self):
         """Initialize the agent and set up team-based execution if configured.
 
         This method performs agent initialization including tool setup and creates
         parallel agent instances for team-based execution when team_size > 1.
         """
+        # Resolve dynamic prompt if live prompt is enabled
+        if self.use_live_prompt:
+            # Set default prompt_key if not specified
+            if self.prompt_key is None:
+                # Default: use agent name + "_prompt" as the key
+                self.prompt_key = f"{self.name}_prompt"
+
+            # Resolve the prompt from live prompt system
+            try:
+                fallback = self.prompt if self.prompt else ""
+                self._resolved_prompt = await get_dynamic_prompt(
+                    self.prompt_key, fallback
+                )
+                logger.debug(
+                    f"Agent '{self.name}' resolved prompt via key '{self.prompt_key}': {len(self._resolved_prompt)} chars"
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to resolve dynamic prompt for agent '{self.name}' with key '{self.prompt_key}': {e}"
+                )
+                self._resolved_prompt = self.prompt if self.prompt else ""
+        else:
+            # Live prompt disabled, use static prompt from code
+            self._resolved_prompt = self.prompt if self.prompt else ""
+            logger.debug(
+                f"Agent '{self.name}' using static prompt from code (live prompt disabled)"
+            )
+
+        self.is_multimodal_supported = self.mas.oxy_name_to_oxy[
+            self.llm_model
+        ].is_multimodal_supported
+        if self.is_multimodal_supported:
+            self.input_schema["properties"]["query"]["description"] = (
+                "The image path and the query to ask about the images, for example: ![image1.png](./static/image1.png) ![image2.png](./static/image2.png) What are image1.png and image2.png, respectively?"
+            )
+
         await super().init()
         if self.intent_understanding_agent:
             self.sub_agents.append(self.intent_understanding_agent)
         self._init_available_tool_name_list()
         if self.llm_model not in self.mas.oxy_name_to_oxy:
             raise Exception(f"LLM model [{self.llm_model}] not exists.")
-
-        self.is_multimodal_supported = self.mas.oxy_name_to_oxy[
-            self.llm_model
-        ].is_multimodal_supported
 
         if self.team_size > 1:
             team_names = []
@@ -226,7 +324,12 @@ class LocalAgent(BaseAgent):
                     "query": {
                         "bool": {
                             "must": [
-                                {"terms": {"trace_id": oxy_request.root_trace_ids}},
+                                {
+                                    "terms": {
+                                        "trace_id": oxy_request.root_trace_ids
+                                        + [oxy_request.current_trace_id]
+                                    }
+                                },
                                 {"term": {"session_name": session_name}},
                             ]
                         }
@@ -335,7 +438,11 @@ class LocalAgent(BaseAgent):
             key = match.group(1)
             return str(arguments.get(key, match.group(0)))
 
-        return pattern.sub(replacer, self.prompt.strip())
+        # Use resolved prompt (with live prompt support) instead of static prompt
+        prompt_to_use = (
+            self._resolved_prompt if self._resolved_prompt else (self.prompt or "")
+        )
+        return pattern.sub(replacer, prompt_to_use.strip())
 
     async def _pre_process(self, oxy_request: OxyRequest) -> OxyRequest:
         """Pre-process request to load conversation history if needed.
@@ -389,17 +496,8 @@ class LocalAgent(BaseAgent):
                 oxy_request, oxy_request.get_query()
             )
         oxy_request.arguments["additional_prompt"] = self.additional_prompt
-        oxy_request.arguments["tools_description"] = "\n\n".join(llm_tool_desc_list)
-        
-        # multimodal support
-        if self.is_multimodal_supported:
-            query_attachments = process_attachments(
-                oxy_request.arguments.get("attachments", [])
-            )
-            if query_attachments:
-                oxy_request.arguments["query"] = query_attachments + [
-                    {"type": "text", "text": oxy_request.arguments["query"]}
-                ]
+        oxy_request.arguments[self.tools_placeholder] = "\n\n".join(llm_tool_desc_list)
+
         return oxy_request
 
     async def _execute(self, oxy_request: OxyRequest) -> OxyResponse:

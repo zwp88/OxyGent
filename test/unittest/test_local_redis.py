@@ -3,6 +3,7 @@ Unit tests for LocalRedis
 """
 
 import time
+
 import pytest
 
 from oxygent.databases.db_redis.local_redis import LocalRedis

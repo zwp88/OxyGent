@@ -29,7 +29,7 @@
 ### 可不可以使用其他python版本？
 ---
 
-建议您现在使用Python 3.10运行OxyGent。未来版本将兼容最新的python包。
+建议您现在使用**Python 3.10**运行OxyGent。未来版本将兼容最新的python包。
 
 ### 是否需要配置其他环境选项？
 ---
@@ -42,6 +42,19 @@
    pip install oxygent # conda
    uv pip install oxygent # uv
 ```
+
+### 安装OxyGent网速太慢怎么办？
+---
+您可以使用镜像安装，比如
+
+```bash
+uv pip install oxygent -i https://pypi.tuna.tsinghua.edu.cn/simple
+```
+
+或者从github直接下载`oxygent`文件夹，放在项目根目录下。（使用本地包需要先安装requirements.txt）
+
+OxyGent会优先引用本地包。
+
 
 [下一章：运行demo](./0_1_demo.md)
 [回到首页](./readme.md)

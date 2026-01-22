@@ -4,9 +4,10 @@ Unit tests for EmbeddingCache & get_embedding
 
 import base64
 import json
+from unittest.mock import AsyncMock, patch
+
 import numpy as np
 import pytest
-from unittest.mock import AsyncMock, patch
 
 import oxygent.embedding_cache as ec
 
@@ -18,7 +19,9 @@ import oxygent.embedding_cache as ec
 def cache(tmp_path, monkeypatch):
     """Use tmp_path to isolate .pkl files"""
     # patch Config.get_cache_save_dir to tmp_path
-    monkeypatch.setattr("oxygent.embedding_cache.Config.get_cache_save_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(
+        "oxygent.embedding_cache.Config.get_cache_save_dir", lambda: str(tmp_path)
+    )
     c = ec.EmbeddingCache(save_batch=2)  # small batch for testing
     yield c
     c.save()  # ensure persistence
@@ -56,7 +59,6 @@ def test_save_and_load(cache):
     assert (c2.data[md5] == vec).all()
 
 
-
 @pytest.mark.asyncio
 async def test_get_batch_mixed(monkeypatch, cache):
     """get batch with some keys cached, others not"""
@@ -89,8 +91,10 @@ async def test_get_embedding_success(monkeypatch):
             return {"outputs": [{"data": [b64]}]}
 
     # patch Config.get_vearch_embedding_model_url
-    monkeypatch.setattr("oxygent.embedding_cache.Config.get_vearch_embedding_model_url",
-                        lambda: "http://fake_url")
+    monkeypatch.setattr(
+        "oxygent.embedding_cache.Config.get_vearch_embedding_model_url",
+        lambda: "http://fake_url",
+    )
 
     with patch("oxygent.embedding_cache.httpx.AsyncClient") as client_cls:
         client = client_cls.return_value.__aenter__.return_value

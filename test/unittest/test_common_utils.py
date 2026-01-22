@@ -3,8 +3,8 @@ Unit tests for oxygent.utils.common_utils
 """
 
 import asyncio
-import json
 import hashlib
+import json
 
 import pytest
 
@@ -18,9 +18,9 @@ def test_chunk_list_and_timestamp():
 
 
 def test_extract_json_functions():
-    text = "```json\n{\"a\":1}\n```"
+    text = '```json\n{"a":1}\n```'
     assert cu.extract_first_json(text) == '{"a":1}'
-    assert cu.extract_json_str("foo {\"x\":2}") == '{"x":2}'
+    assert cu.extract_json_str('foo {"x":2}') == '{"x":2}'
     with pytest.raises(ValueError):
         cu.extract_json_str("no-json")
 
@@ -49,14 +49,9 @@ def patch_source_to_bytes(monkeypatch):
     monkeypatch.setattr(
         cu,
         "source_to_bytes",
-        lambda src: asyncio.Future(),
+        lambda src: asyncio.new_event_loop().create_future(),
         raising=True,
     )
     fut = cu.source_to_bytes(None)
-    fut.set_result(b"\x89PNG\r\n\x1a\n")  
+    fut.set_result(b"\x89PNG\r\n\x1a\n")
     yield
-
-
-
-
-

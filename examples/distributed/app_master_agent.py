@@ -1,22 +1,18 @@
-import json
+import os
 
 from oxygent import MAS, oxy
-from oxygent.utils.env_utils import get_env_var
-
-with open("config.json", "r") as f:
-    config = json.load(f)
 
 oxy_space = [
     oxy.HttpLLM(
         name="default_name",
-        api_key=get_env_var("DEFAULT_LLM_API_KEY"),
-        base_url=get_env_var("DEFAULT_LLM_BASE_URL"),
-        model_name=get_env_var("DEFAULT_LLM_MODEL_NAME"),
+        api_key=os.getenv("DEFAULT_LLM_API_KEY"),
+        base_url=os.getenv("DEFAULT_LLM_BASE_URL"),
+        model_name=os.getenv("DEFAULT_LLM_MODEL_NAME"),
         llm_params={"temperature": 0.01},
         semaphore=4,
     ),
     oxy.StdioMCPClient(
-        name="filesystem",
+        name="file_tools",
         params={
             "command": "npx",
             "args": ["-y", "@modelcontextprotocol/server-filesystem", "./local_file"],
@@ -31,7 +27,7 @@ oxy_space = [
     oxy.ReActAgent(
         name="file_agent",
         desc="A tool for querying local files",
-        tools=["filesystem"],
+        tools=["file_tools"],
         llm_model="default_name",
     ),
     oxy.SSEOxyGent(

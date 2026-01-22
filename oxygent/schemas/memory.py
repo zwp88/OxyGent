@@ -32,7 +32,7 @@ class Message(BaseModel):
     """Represents a chat message in the conversation."""
 
     role: Literal["system", "user", "assistant", "tool"] = Field(...)
-    content: Optional[Union[str, list]] = Field(default=None)
+    content: Optional[Union[str, list, dict]] = Field(default=None)
     tool_calls: Optional[List[ToolCall]] = Field(default=None)
     name: Optional[str] = Field(default=None)
     tool_call_id: Optional[str] = Field(default=None)
@@ -67,7 +67,9 @@ class Message(BaseModel):
         if self.content is not None:
             message["content"] = self.content
         if self.tool_calls is not None:
-            message["tool_calls"] = [tool_call.dict() for tool_call in self.tool_calls]
+            message["tool_calls"] = [
+                tool_call.model_dump() for tool_call in self.tool_calls
+            ]
         if self.name is not None:
             message["name"] = self.name
         if self.tool_call_id is not None:
@@ -151,7 +153,7 @@ class Memory(BaseModel):
     """Fixed-size sliding window of recent chat messages."""
 
     messages: List[Message] = Field(default_factory=list)
-    max_messages: int = Field(default=10)
+    max_messages: int = Field(default=50)
 
     def add_message(self, message: Message) -> None:
         """Add a message to memory."""
@@ -169,24 +171,13 @@ class Memory(BaseModel):
         """Get n most recent messages."""
         return self.messages[-n:]
 
-    def to_dict_list(self) -> List[dict]:
+    def to_dict_list(self, short_memory_size=None) -> List[dict]:
         """Convert messages to list of dicts (with trimming first)."""
-        self._trim_memory()
+        if short_memory_size is None:
+            short_memory_size = self.max_messages // 2
+        if len(self.messages) > short_memory_size * 2 + 2:
+            messages = self.messages[0 - (short_memory_size * 2 + 1) :]
+            if self.messages[0].role == "system":
+                messages.insert(0, self.messages[0])
+            return [msg.to_dict() for msg in messages]
         return [msg.to_dict() for msg in self.messages]
-
-    def _trim_memory(self) -> None:
-        """Ensure memory does not exceed max_messages, keeping system first and deleting (user, agent) pairs."""
-        while len(self.messages) > self.max_messages:
-            if len(self.messages) <= 1:
-                # Only system remains, nothing to delete
-                break
-
-            # Always keep system as the first message
-            # Delete the first (user, agent) pair after system
-            # Ensure at least two messages exist after system to delete
-            if len(self.messages) >= 3:
-                # Remove messages[1] and messages[2]
-                del self.messages[1:3]
-            else:
-                # If only system + one message left but still exceeds max, delete the last
-                self.messages.pop()

@@ -11,15 +11,12 @@ from pydantic import BaseModel, Field
 
 class LLMState(Enum):
     TOOL_CALL = "tool_call"
-    RETRIEVAL = "retrieval"
     ANSWER = "answer"
     ERROR_PARSE = "error_parse"
-
-    SUCCESS = "success"
     ERROR_CALL = "error_call"
 
 
 class LLMResponse(BaseModel):
     state: LLMState
-    output: Union[str, dict]
+    output: Union[str, list, dict]
     ori_response: str = Field(default="")

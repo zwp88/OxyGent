@@ -15,19 +15,18 @@ NOTE: This module contains the following parts:
     - agent_organization: Dictionary representing the organization structure of agents
     - lock: Boolean to control task execution flow
 """
-# from __future__ import annotations
 
+# from __future__ import annotations
 import asyncio
 import json
 import os
 import traceback
 from collections import OrderedDict
-from typing import Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import msgpack
-import shortuuid
-from dotenv import load_dotenv
 from elasticsearch import AsyncElasticsearch
+from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict, Field
 
 from .config import Config
@@ -44,11 +43,17 @@ from .oxy.base_tool import BaseTool
 from .oxy.llms.base_llm import BaseLLM
 from .oxy.mcp_tools.base_mcp_client import BaseMCPClient
 from .routes import router
-from .schemas import OxyRequest, OxyResponse, WebResponse
-from .utils.common_utils import msgpack_preprocess, print_tree, to_json
+from .schemas import OxyRequest, OxyResponse, SSEMessage, WebResponse
+from .utils.common_utils import (
+    generate_uuid,
+    get_format_time,
+    get_timestamp,
+    msgpack_preprocess,
+    print_tree,
+    to_json,
+)
 
 logger = None
-load_dotenv(Config.get_env_path(), override=Config.get_env_is_override())
 
 
 class MAS(BaseModel):
@@ -68,6 +73,8 @@ class MAS(BaseModel):
 
     first_query: str = Field("")
 
+    welcome_message: str = Field(default_factory=Config.get_agent_welcome_message)
+
     agent_organization: dict = Field(default_factory=list)
 
     vearch_client: Optional[VearchDB] = Field(None)
@@ -80,6 +87,28 @@ class MAS(BaseModel):
     event_dict: dict = Field(default_factory=dict)
 
     message_prefix: str = Field("oxygent")
+
+    global_data: dict = Field(
+        default_factory=dict, description="public data in the scope of application"
+    )
+
+    func_filter: Optional[Callable] = Field(
+        lambda x: x, exclude=True, description="filter function"
+    )
+    func_interceptor: Optional[Callable] = Field(
+        lambda x: None, exclude=True, description="interceptor function"
+    )
+
+    func_process_message: Optional[Callable] = Field(
+        lambda x, oxy_request: x, exclude=True, description="process message function"
+    )
+
+    routers: list = Field(default_factory=list)
+    middlewares: list = Field(default_factory=list)
+
+    stream_dict: dict[str, list] = Field(default_factory=dict)
+    feedback_dict: dict[str, asyncio.Queue] = Field(default_factory=dict)
+    channel_id_dict: dict[str, list] = Field(default_factory=dict)
 
     def __init__(self, **kwargs):
         """Construct a new :class:`MAS`.
@@ -102,6 +131,16 @@ class MAS(BaseModel):
 
     async def __aenter__(self):
         await self.init()
+
+        # Register this MAS instance globally for API access
+        try:
+            from .routes import set_global_mas_instance
+
+            set_global_mas_instance(self)
+            logger.debug("Registered MAS instance globally for API access")
+        except Exception as e:
+            logger.warning(f"Failed to register MAS instance globally: {e}")
+
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -128,8 +167,6 @@ class MAS(BaseModel):
         import platform
         from datetime import datetime
 
-        # logger.info(f"MAS app name: {Config.get_app_name()}")
-        # logger.info(f"MAS app env: {Config._env}")
         logger.info("=" * 64)
         logger.info("🚀 OxyGent MAS Application Startup Information")
         logger.info("=" * 64)
@@ -138,7 +175,6 @@ class MAS(BaseModel):
         logger.info(f"Environment  : {Config._env}")
         logger.info(f"Port         : {Config.get_server_port()}")
         logger.info(f"Python Ver   : {platform.python_version()}")
-        # logger.info(f"Config Path  : {Config.get_config_path()}")
         logger.info(f"Cache Dir    : {Config.get_cache_save_dir()}")
         logger.info(f"Start Time   : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         logger.info("=" * 64)
@@ -153,9 +189,6 @@ class MAS(BaseModel):
             ValueError: If another component with the same ``oxy.name``
                 already exists in the registry.
         """
-        # print(self.oxy_name_to_oxy)
-        # import pdb
-        # pdb.set_trace()
         if oxy.name in self.oxy_name_to_oxy:
             raise Exception(f"oxy [{oxy.name}] already exists.")
         self.oxy_name_to_oxy[oxy.name] = oxy
@@ -179,6 +212,7 @@ class MAS(BaseModel):
         - Initializing the database connections (Elasticsearch, Redis)
         - Setting up the agent organization structure
         - Initialize the vector search if configured
+        - Setting up dynamic agents for live prompt management
         """
         self.show_banner()
         self.show_mas_info()
@@ -200,6 +234,18 @@ class MAS(BaseModel):
         # Build the agent organization structure
         self.init_agent_organization()
         self.show_org()
+
+        # Setup dynamic agents for live prompt management
+        logger.info("📋 OxyGent MAS Management Initialization")
+        logger.info("=" * 64)
+        try:
+            from .live_prompt import setup_dynamic_agents
+
+            await setup_dynamic_agents(self)
+            logger.debug("Dynamic agent management initialized")
+        except Exception as e:
+            logger.warning(f"Failed to setup dynamic agents: {e}")
+        logger.info("=" * 64)
 
     async def cleanup_servers(self) -> None:
         """Gracefully shut down remote servers/clients.
@@ -223,11 +269,9 @@ class MAS(BaseModel):
     async def init_db(self):
         """Es --- (table_name: key)
 
-        {app_name}_trace: trace_id: record trace of each call {app_name}_node: node_id:
-        record log of each node {app_name}_history: sub_session_id: record history of
-        read and write operations
-
-        sub_session_id = trace_id_{caller}_{callee}
+        {app_name}_trace: trace_id: record trace of each call
+        {app_name}_node: node_id: record log of each node
+        {app_name}_history: history_id: record history of read and write operations
         """
 
         # es
@@ -240,13 +284,17 @@ class MAS(BaseModel):
             self.es_client = db_factory.get_instance(JesEs, hosts, user, password)
         else:
             self.es_client = db_factory.get_instance(LocalEs)
-
+        # trace table
         await self.es_client.create_index(
             Config.get_app_name() + "_trace",
             {
                 "mappings": {
                     "properties": {
+                        "request_id": {"type": "keyword"},
+                        "group_id": {"type": "keyword"},
+                        "group_data": Config.get_es_schema_group_data(),
                         "trace_id": {"type": "keyword"},
+                        "shared_data": Config.get_es_schema_shared_data(),
                         "from_trace_id": {"type": "keyword"},
                         "root_trace_ids": {"type": "keyword"},
                         "input": {"type": "text"},
@@ -256,27 +304,37 @@ class MAS(BaseModel):
                             "format": "yyyy-MM-dd HH:mm:ss.SSSSSSSSS",
                             "type": "date",
                         },
-                    }
-                }
+                    },
+                },
+                "settings": Config.get_es_settings_config(),
             },
         )
+        # message table
         if Config.get_message_is_stored():
             await self.es_client.create_index(
                 Config.get_app_name() + "_message",
                 {
                     "mappings": {
                         "properties": {
+                            "message_id": {"type": "keyword"},
+                            "group_id": {"type": "keyword"},
                             "trace_id": {"type": "keyword"},
+                            "node_id": {"type": "keyword"},
+                            "node_name": {"type": "keyword"},
                             "message": {"type": "text"},
                             "message_type": {"type": "keyword"},
+                            "message_event": {"type": "keyword"},
+                            "message_timestamp": {"type": "long"},
                             "create_time": {
                                 "format": "yyyy-MM-dd HH:mm:ss.SSSSSSSSS",
                                 "type": "date",
                             },
-                        }
-                    }
+                        },
+                    },
+                    "settings": Config.get_es_settings_config(),
                 },
             )
+        # node table
         await self.es_client.create_index(
             Config.get_app_name() + "_node",
             {
@@ -284,6 +342,7 @@ class MAS(BaseModel):
                     "properties": {
                         "node_id": {"type": "keyword"},
                         "node_type": {"type": "keyword"},
+                        "group_id": {"type": "keyword"},
                         "trace_id": {"type": "keyword"},
                         "caller": {"type": "keyword"},
                         "callee": {"type": "keyword"},
@@ -297,6 +356,7 @@ class MAS(BaseModel):
                         "call_stack": {"type": "text"},
                         "node_id_stack": {"type": "text"},
                         "pre_node_ids": {"type": "text"},
+                        "shared_data": Config.get_es_schema_shared_data(),
                         "create_time": {
                             "format": "yyyy-MM-dd HH:mm:ss.SSSSSSSSS",
                             "type": "date",
@@ -305,16 +365,18 @@ class MAS(BaseModel):
                             "format": "yyyy-MM-dd HH:mm:ss.SSSSSSSSS",
                             "type": "date",
                         },
-                    }
-                }
+                    },
+                },
+                "settings": Config.get_es_settings_config(),
             },
         )
+        # history table
         await self.es_client.create_index(
             Config.get_app_name() + "_history",
             {
                 "mappings": {
                     "properties": {
-                        "sub_session_id": {"type": "keyword"},
+                        "history_id": {"type": "keyword"},
                         "session_name": {"type": "keyword"},
                         "trace_id": {"type": "keyword"},
                         "memory": {"type": "text"},
@@ -322,18 +384,148 @@ class MAS(BaseModel):
                             "format": "yyyy-MM-dd HH:mm:ss.SSSSSSSSS",
                             "type": "date",
                         },
+                    },
+                },
+                "settings": Config.get_es_settings_config(),
+            },
+        )
+        # prompt table
+        await self.es_client.create_index(
+            Config.get_app_name() + "_prompt",
+            {
+                "mappings": {
+                    "properties": {
+                        "prompt_key": {
+                            "type": "keyword"  # Prompt key for exact matching
+                        },
+                        "prompt_content": {
+                            "type": "text",
+                            "analyzer": "standard",  # Prompt content
+                        },
+                        "description": {
+                            "type": "text"  # Prompt description
+                        },
+                        "category": {
+                            "type": "keyword"  # Category: system, expert, workflow, etc.
+                        },
+                        "agent_type": {
+                            "type": "keyword"  # Corresponding Agent type
+                        },
+                        "version": {
+                            "type": "integer"  # Version number
+                        },
+                        "is_active": {
+                            "type": "boolean"  # Whether active
+                        },
+                        "created_at": {"type": "date"},
+                        "updated_at": {"type": "date"},
+                        "created_by": {
+                            "type": "keyword"  # Creator
+                        },
+                        "tags": {
+                            "type": "keyword"  # Tags
+                        },
                     }
-                }
+                },
+                "settings": Config.get_es_settings_config(),
+            },
+        )
+        # prompt history table
+        await self.es_client.create_index(
+            Config.get_app_name() + "_prompt_history",
+            {
+                "mappings": {
+                    "properties": {
+                        "prompt_key": {
+                            "type": "keyword"  # Prompt key for exact matching
+                        },
+                        "prompt_content": {
+                            "type": "text",
+                            "analyzer": "standard",  # Prompt content
+                        },
+                        "description": {
+                            "type": "text"  # Prompt description
+                        },
+                        "category": {
+                            "type": "keyword"  # Category: system, expert, workflow, etc.
+                        },
+                        "agent_type": {
+                            "type": "keyword"  # Corresponding Agent type
+                        },
+                        "version": {
+                            "type": "integer"  # Version number
+                        },
+                        "is_active": {
+                            "type": "boolean"  # Whether active
+                        },
+                        "is_history": {
+                            "type": "boolean"  # Whether this is a history record
+                        },
+                        "history_id": {
+                            "type": "keyword"  # History record ID
+                        },
+                        "created_at": {"type": "date"},
+                        "updated_at": {"type": "date"},
+                        "archived_at": {"type": "date"},
+                        "created_by": {
+                            "type": "keyword"  # Creator
+                        },
+                        "tags": {
+                            "type": "keyword"  # Tags
+                        },
+                    }
+                },
+                "settings": Config.get_es_settings_config(),
+            },
+        )
+        # Rating record index mapping
+        await self.es_client.create_index(
+            Config.get_app_name() + "_rating",
+            {
+                "mappings": {
+                    "properties": {
+                        "rating_id": {"type": "keyword"},
+                        "trace_id": {"type": "keyword"},
+                        "rating_type": {"type": "keyword"},
+                        "user_id": {"type": "keyword"},
+                        "user_ip": {"type": "ip"},
+                        "comment": {"type": "text"},
+                        "erp": {"type": "keyword"},
+                        "create_time": {"type": "keyword"},
+                        "update_time": {"type": "keyword"},
+                    }
+                },
+                "settings": Config.get_es_settings_config(),
+            },
+        )
+        # Rating statistics index mapping
+        await self.es_client.create_index(
+            Config.get_app_name() + "_rating_stats",
+            {
+                "mappings": {
+                    "properties": {
+                        "trace_id": {"type": "keyword"},
+                        "like_count": {"type": "integer"},
+                        "dislike_count": {"type": "integer"},
+                        "total_ratings": {"type": "integer"},
+                        "satisfaction_rate": {"type": "float"},
+                        "last_updated": {"type": "keyword"},
+                    }
+                },
+                "settings": Config.get_es_settings_config(),
             },
         )
 
-        # redis
+        # init redis client
         redis_config = Config.get_redis_config()
         if redis_config:
             host = redis_config["host"]
             port = redis_config["port"]
             password = redis_config["password"]
-            self.redis_client = JimdbApRedis(host=host, port=port, password=password)
+            db = redis_config.get("db", 0)
+            self.redis_client = JimdbApRedis(
+                host=host, port=port, password=password, db=db
+            )
         else:
             self.redis_client = LocalRedis()
 
@@ -352,7 +544,11 @@ class MAS(BaseModel):
             if not isinstance(oxy, class_type):
                 continue
             oxy.set_mas(self)
-            tasks.append(oxy.init())
+            task = oxy.init()
+            if Config.get_tool_is_concurrent_init():
+                tasks.append(task)
+            else:
+                await task
         if tasks:
             await asyncio.gather(*tasks)
 
@@ -412,7 +608,9 @@ class MAS(BaseModel):
                     agent_organization[-1]["children"] = []
 
                 tool_name_list = []
-                for tool_name in agent.permitted_tool_name_list:
+                for tool_name in list(
+                    set(agent.permitted_tool_name_list + agent.permitted_oxy)
+                ):
                     # if not agent.is_sourcing_tools and tool_name == 'retrieve_tools':
                     #     continue
                     tool_name_list.append(tool_name)
@@ -534,7 +732,9 @@ class MAS(BaseModel):
         oxy_response = await oxy.execute(oxy_request)
         return oxy_response.output
 
-    async def send_message(self, message, redis_key):
+    async def send_message(
+        self, sse_message: SSEMessage, redis_key: str, group_id: str = ""
+    ):
         """Push *message* onto a capped Redis list.
 
         The data is MsgPack‑encoded before being stored.  At most **10** items
@@ -544,27 +744,108 @@ class MAS(BaseModel):
             message: Any serialisable Python object.
             redis_key: Target Redis key (usually ``mas_msg:{app}:{trace_id}``).
         """
-        import datetime
+        message = sse_message.data
+        if Config.get_message_is_show_in_terminal():
+            logger.info(f"--- Send Message ---: {sse_message.to_sse()}")
 
-        bytes_msg = msgpack.packb(msgpack_preprocess(message))
-        if Config.get_message_is_stored():
+        message_type = ""
+        message_is_stored = Config.get_message_is_stored()
+        message_is_send = True
+        _is_stored, _is_send = "_is_stored", "_is_send"
+        if isinstance(message, dict):
+            message_type = message.get("type", "")
+            if _is_stored in message:
+                message_is_stored = message[_is_stored]
+                del message[_is_stored]
+            if _is_send in message:
+                message_is_send = message[_is_send]
+                del message[_is_send]
+            sse_message.data = message
+
+        if message_is_stored:
             parts = redis_key.split(":")
             current_trace_id = parts[-1] if len(parts) >= 3 else ""
 
-            message_doc = {
-                "trace_id": current_trace_id,
-                "message": to_json(message),  # Convert message to JSON string
-                "message_type": message.get("type", "")
-                if isinstance(message, dict)
-                else "",
-                "create_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"),
-            }
+            # 考虑 message 是 str 的情况
+            node_id = ""
+            node_name = ""
+            message_timestamp = get_timestamp()
+            if isinstance(message, dict):
+                message_timestamp = message.get("timestamp", get_timestamp())
+                if isinstance(message.get("content"), dict):
+                    node_id = message.get("content", {}).get("node_id", "")
+                    node_name = message.get("content", {}).get("agent", "")
 
-            # Insert into Elasticsearch
-            await self.es_client.index(
-                index=Config.get_app_name() + "_message", body=message_doc
-            )
-        await self.redis_client.lpush(redis_key, bytes_msg, max_size=10)
+            if message_type in ["stream", "stream_end"]:
+                # 排队
+                if message_type == "stream":
+                    delta = message.get("content", {}).get("delta", "")
+                    if node_id not in self.stream_dict:
+                        self.stream_dict[node_id] = []
+                    self.stream_dict[node_id].append(delta)
+                if message_type == "stream_end" or (
+                    self.stream_dict[node_id]
+                    and len(self.stream_dict[node_id])
+                    % Config.get_message_stream_batch_size()
+                    == 0
+                ):
+                    message_id = generate_uuid()
+                    merged_type = "merged_stream"
+                    save_message_task = asyncio.create_task(
+                        self.es_client.index(
+                            Config.get_app_name() + "_message",
+                            doc_id=message_id,
+                            body={
+                                "message_id": message_id,
+                                "group_id": group_id,
+                                "trace_id": current_trace_id,
+                                "node_id": node_id,
+                                "node_name": node_name,
+                                "message": to_json(
+                                    {
+                                        "type": merged_type,
+                                        "content": "".join(self.stream_dict[node_id]),
+                                    }
+                                ),
+                                "message_type": merged_type,
+                                "message_event": sse_message.event,
+                                "message_timestamp": message_timestamp,
+                                "create_time": get_format_time(),
+                            },
+                        )
+                    )
+                    save_message_task.add_done_callback(self.background_tasks.discard)
+                    self.background_tasks.add(save_message_task)
+                    self.stream_dict[node_id].clear()
+            else:
+                save_message_task = asyncio.create_task(
+                    self.es_client.index(
+                        Config.get_app_name() + "_message",
+                        doc_id=sse_message.id,
+                        body={
+                            "message_id": sse_message.id,
+                            "group_id": group_id,
+                            "trace_id": current_trace_id,
+                            "node_id": node_id,
+                            "node_name": node_name,
+                            "message": to_json(message),
+                            "message_type": message_type,
+                            "message_event": sse_message.event,
+                            "message_timestamp": message_timestamp,
+                            "create_time": get_format_time(),
+                        },
+                    )
+                )
+                save_message_task.add_done_callback(self.background_tasks.discard)
+                self.background_tasks.add(save_message_task)
+        if message_is_send:
+            bytes_msg = msgpack.packb(msgpack_preprocess(sse_message.to_sse()))
+            await self.redis_client.lpush(redis_key, bytes_msg)
+
+    def clear_queues(self, trace_id):
+        for channel_id in self.channel_id_dict.get(trace_id, []):
+            if channel_id in self.feedback_dict:
+                del self.feedback_dict[channel_id]
 
     async def chat_with_agent(
         self,
@@ -593,28 +874,31 @@ class MAS(BaseModel):
                 payload["shared_data"] = dict()
             payload["shared_data"]["query"] = payload["query"]
 
-            # payload = payload or {}
-            # payload.setdefault("shared_data",{})["query"] = payload.get("query","")
+            group_data = payload.get("group_data", {})
 
-            if (
-                "restart_node_id" in payload
-                and payload.get("restart_node_id")
-            ):
+            if "restart_node_id" in payload and payload.get("restart_node_id"):
                 es_response = await self.es_client.search(
                     Config.get_app_name() + "_node",
                     {
                         "query": {"term": {"node_id": payload["restart_node_id"]}},
-                        "size": 1
+                        "size": 1,
                     },
                 )
-                
+
                 if es_response["hits"]["hits"]:
                     restart_node_data = es_response["hits"]["hits"][0]["_source"]
-                    
+
                     if payload.get("reference_trace_id"):
-                        if restart_node_data["trace_id"] == payload["reference_trace_id"]:
-                            payload["restart_node_order"] = restart_node_data["update_time"]
-                            logger.info(f"Found restart node {payload['restart_node_id']} with matching trace_id")
+                        if (
+                            restart_node_data["trace_id"]
+                            == payload["reference_trace_id"]
+                        ):
+                            payload["restart_node_order"] = restart_node_data[
+                                "update_time"
+                            ]
+                            logger.info(
+                                f"Found restart node {payload['restart_node_id']} with matching trace_id"
+                            )
                         else:
                             logger.warning(
                                 f"Node {payload['restart_node_id']} found but trace_id mismatch: "
@@ -622,12 +906,66 @@ class MAS(BaseModel):
                             )
                     else:
                         payload["restart_node_order"] = restart_node_data["update_time"]
-                        payload["reference_trace_id"] = restart_node_data["trace_id"]  # 自动设置
-                        logger.info(f"Found restart node {payload['restart_node_id']}, auto-set trace_id to {restart_node_data['trace_id']}")
+                        payload["reference_trace_id"] = restart_node_data[
+                            "trace_id"
+                        ]  # 自动设置
+                        logger.info(
+                            f"Found restart node {payload['restart_node_id']}, auto-set trace_id to {restart_node_data['trace_id']}"
+                        )
                 else:
-                    logger.warning(f"Restart node {payload['restart_node_id']} not found in ES")
+                    logger.warning(
+                        f"Restart node {payload['restart_node_id']} not found in ES"
+                    )
 
             oxy_request = OxyRequest(mas=self)
+            if not send_msg_key:
+                oxy_request.is_send_message = False
+            oxy_request.group_data = group_data
+            if "current_trace_id" in payload and payload["current_trace_id"]:
+                oxy_request.current_trace_id = payload["current_trace_id"]
+            # Set group_id: inherit if from_trace_id is provided, else new
+            if "from_trace_id" in payload and payload["from_trace_id"]:
+                es_response_group_id = await self.es_client.search(
+                    Config.get_app_name() + "_trace",
+                    {
+                        "query": {"term": {"_id": payload["from_trace_id"]}},
+                        "size": 1,
+                    },
+                )
+
+                hits = es_response_group_id.get("hits", {}).get("hits", [])
+                if hits:
+                    oxy_request.group_id = hits[0]["_source"].get("group_id", "")
+                    raw_group_data = hits[0]["_source"].get("group_data", {})
+                    if isinstance(raw_group_data, str):
+                        try:
+                            history_group_data = json.loads(raw_group_data)
+                        except json.JSONDecodeError:
+                            logger.warning(
+                                "Failed to parse group_data from string, using empty dict"
+                            )
+                            history_group_data = {}
+                    else:
+                        history_group_data = (
+                            raw_group_data if isinstance(raw_group_data, dict) else {}
+                        )
+
+                    merged_group_data = history_group_data.copy()
+                    merged_group_data.update(oxy_request.group_data)
+                    oxy_request.group_data = merged_group_data
+                    logger.debug(
+                        f"继承历史会话 group_id: {oxy_request.group_id}, "
+                        f"历史 group_data: {history_group_data if history_group_data else '空'}, "
+                        f"当前 group_data: {oxy_request.group_data if oxy_request.group_data else '空'}, "
+                        f"合并后 group_data: {merged_group_data}",
+                        extra={"trace_id": oxy_request.current_trace_id},
+                    )
+                else:
+                    logger.warning(
+                        f"未找到 from_trace_id: {payload['from_trace_id']} 对应的记录，无法继承历史 group_data",
+                        extra={"trace_id": oxy_request.current_trace_id},
+                    )
+
             oxy_request_fields = oxy_request.model_fields
             for k, v in payload.items():
                 if k in oxy_request_fields:
@@ -638,15 +976,20 @@ class MAS(BaseModel):
             if not oxy_request.callee:
                 oxy_request.callee = self.master_agent_name
 
-            answer = await oxy_request.start()
+            oxy_response = await oxy_request.start()
+
             if send_msg_key:
                 await self.send_message(
-                    {"event": "close", "data": "done"}, send_msg_key
+                    SSEMessage(event="close", data="done"),
+                    send_msg_key,
+                    group_id=oxy_request.group_id,
                 )
-            return answer
+            return oxy_response
         except Exception:
             logger.error(traceback.format_exc())
             raise
+        finally:
+            self.clear_queues(oxy_request.current_trace_id)
 
     # ------------------------------------------------------------------
     # Interactive CLI helper
@@ -672,11 +1015,50 @@ class MAS(BaseModel):
             payload = {"query": query, "from_trace_id": from_trace_id}
             oxy_response = await self.chat_with_agent(payload=payload)
             from_trace_id = oxy_response.oxy_request.current_trace_id
-            # print("LLM: ", oxy_response.output)
+            print("LLM: ", oxy_response.output)
 
     # ------------------------------------------------------------------
     # FastAPI + SSE web service (unedited original docstring preserved)
     # ------------------------------------------------------------------
+
+    async def _process_redis_messages(self, redis_key, current_trace_id):
+        while True:
+            bytes_msg = await self.redis_client.rpop(redis_key)
+            if bytes_msg is None:
+                await asyncio.sleep(0.1)
+                continue
+            sse_message_dict = msgpack.unpackb(bytes_msg)
+            if sse_message_dict:
+                if sse_message_dict.get("event", "message") == "close":
+                    yield sse_message_dict
+                    logger.info(
+                        "SSE connection terminated.",
+                        extra={"trace_id": current_trace_id},
+                    )
+                    break
+                # Convert before sending message: Use msg.content.arguments.query
+
+                message = sse_message_dict.get("data", {})
+                if isinstance(message, dict):
+                    if message.get("type", "") == "tool_call" and isinstance(
+                        message.get("content", {})
+                        .get("arguments", {})
+                        .get("query", ""),
+                        list,
+                    ):
+                        for msg in message["content"]["arguments"]["query"]:
+                            if msg.get("type") == "text":
+                                message["content"]["arguments"]["query"] = msg.get(
+                                    "text", ""
+                                )
+                                break
+                    if message.get("type", "") == "observation":
+                        message["content"]["output"] = to_json(
+                            message["content"]["output"]
+                        )
+                    sse_message_dict["data"] = message
+                # Send message
+                yield sse_message_dict
 
     async def event_stream(self, redis_key, current_trace_id, task):
         try:
@@ -684,40 +1066,10 @@ class MAS(BaseModel):
                 lambda future: self.active_tasks.pop(current_trace_id, None)
             )
             self.active_tasks[current_trace_id] = task
-            while True:
-                bytes_msg = await self.redis_client.rpop(redis_key)
-                if bytes_msg is None:
-                    await asyncio.sleep(0.1)
-                    continue
-                message = msgpack.unpackb(bytes_msg)
-                if message:
-                    if isinstance(message, dict):
-                        if "event" in message:
-                            yield message
-                            logger.info(
-                                "SSE connection terminated.",
-                                extra={"trace_id": current_trace_id},
-                            )
-                            break
-                        # Convert before sending message: Use msg.content.arguments.query
-                        if message.get("type", "") == "tool_call" and isinstance(
-                            message.get("content", {})
-                            .get("arguments", {})
-                            .get("query", ""),
-                            list,
-                        ):
-                            for msg in message["content"]["arguments"]["query"]:
-                                if msg.get("type") == "text":
-                                    message["content"]["arguments"]["query"] = msg.get(
-                                        "text", ""
-                                    )
-                                    break
-                        if message.get("type", "") == "observation":
-                            message["content"]["output"] = to_json(
-                                message["content"]["output"]
-                            )
-                    # Send message
-                    yield {"data": to_json(message)}
+            async for message in self._process_redis_messages(
+                redis_key, current_trace_id
+            ):
+                yield message
         except asyncio.CancelledError:
             logger.info(
                 "SSE connection terminated.",
@@ -726,13 +1078,38 @@ class MAS(BaseModel):
             self.active_tasks[current_trace_id].cancel()
             raise
 
-    async def start_web_service(self, first_query=None, host=None, port=None):
+    async def yield_async_message(self, redis_key, current_trace_id):
+        try:
+            async for message in self._process_redis_messages(
+                redis_key, current_trace_id
+            ):
+                yield message
+        except asyncio.CancelledError:
+            logger.info(
+                "SSE connection terminated.",
+                extra={"trace_id": current_trace_id},
+            )
+            raise
+
+    async def start_web_service(
+        self,
+        first_query=None,
+        welcome_message=None,
+        host=None,
+        port=None,
+        routers=None,
+        middlewares=None,
+    ):
         """Start the FastAPI + SSE service (see original inline documentation)."""
+        self.routers.extend(routers or [])
+        self.middlewares.extend(middlewares or [])
 
         if not self.master_agent_name:
             logger.warning("No agent was registered.")
 
         self.first_query = first_query  # First query would be displayed in the frontend
+        if welcome_message:
+            self.welcome_message = welcome_message
         if host is None:
             host = Config.get_server_host()
         if port is None:
@@ -742,9 +1119,48 @@ class MAS(BaseModel):
         import importlib.resources
 
         import uvicorn
-        from fastapi import FastAPI, Request
+        from fastapi import APIRouter, FastAPI, Request
+        from fastapi.routing import APIRoute
         from fastapi.staticfiles import StaticFiles
         from sse_starlette.sse import EventSourceResponse
+
+        def get_banks_from_router(router: APIRouter) -> List[Dict[str, Any]]:
+            banks = []
+            for route in router.routes:
+                if isinstance(route, APIRoute) and "bank" in getattr(route, "tags", []):
+                    description = route.description
+                    input_schema = {"type": "object", "properties": {}, "required": []}
+                    for param in (
+                        route.dependant.query_params + route.dependant.body_params
+                    ):
+                        param_type = param.type_
+                        # 类型转换（简单实现）
+                        if param_type is str:
+                            t = "string"
+                        elif param_type is int:
+                            t = "integer"
+                        elif param_type is float:
+                            t = "number"
+                        elif param_type is bool:
+                            t = "boolean"
+                        else:
+                            t = "string"
+                        input_schema["properties"][param.name] = {
+                            "type": t,
+                            "description": param.field_info.description or "",
+                        }
+                        if param.required:
+                            input_schema["required"].append(param.name)
+                    banks.append(
+                        {
+                            "name": route.endpoint.__name__,
+                            "endpoint": route.path,
+                            "methods": route.methods,
+                            "description": description,
+                            "inputSchema": input_schema,
+                        }
+                    )
+            return banks
 
         app = FastAPI()
 
@@ -758,12 +1174,33 @@ class MAS(BaseModel):
             allow_headers=["*"],
         )
 
+        for app_middleware in self.middlewares:
+            app.add_middleware(app_middleware)
+
+        banks = []
+        app.include_router(router)
+        for app_router in self.routers:
+            app.include_router(app_router)
+            if isinstance(app_router, BankRouter):
+                app_router.set_mas(self)
+                banks.extend(get_banks_from_router(app_router))
+
+        if banks:
+
+            @app.get("/list_banks")
+            def list_banks():
+                return banks
+
         web_src = "web"
         with importlib.resources.as_file(
             importlib.resources.files("oxygent") / web_src
         ) as web_path:
             app.mount("/web", StaticFiles(directory=str(web_path)), name="web")
-        app.include_router(router)
+
+        upload_dir = os.path.join(Config.get_cache_save_dir(), "uploads")
+        os.makedirs(upload_dir, exist_ok=True)
+        app.mount("/static", StaticFiles(directory=upload_dir), name="static")
+
         """
         For all of the nodes we fill the following information:
         - path: The path from the root node (master agent) to the currrent node.
@@ -823,8 +1260,47 @@ class MAS(BaseModel):
                 data={"first_query": self.first_query if self.first_query else ""}
             ).to_dict()
 
-        @app.api_route("/sse/chat", methods=["GET", "POST"])
-        async def sse_chat(request: Request):
+        @app.get("/get_welcome_message")
+        def get_welcome_message():
+            return WebResponse(
+                data={
+                    "welcome_message": self.welcome_message
+                    if self.welcome_message
+                    else ""
+                }
+            ).to_dict()
+
+        @app.get("/get_agents")
+        def get_agents():
+            """Get detailed agent information for frontend display."""
+            agents = []
+
+            def extract_agents(node):
+                """Recursively extract agent information from organization tree."""
+                if isinstance(node, dict):
+                    if node.get("type") == "agent":
+                        # Extract agent details
+                        agent_info = {
+                            "name": node.get("name", ""),
+                            "desc": node.get("desc", ""),
+                            "type": node.get("type", "agent"),
+                            "path": node.get("path", []),
+                        }
+                        agents.append(agent_info)
+
+                    # Process children
+                    children = node.get("children", [])
+                    if isinstance(children, list):
+                        for child in children:
+                            extract_agents(child)
+
+            # Extract agents from organization structure
+            if hasattr(self, "agent_organization") and self.agent_organization:
+                extract_agents(self.agent_organization)
+
+            return WebResponse(data={"agents": agents}).to_dict()
+
+        async def request_to_payload(request: Request):
             if request.method == "GET":
                 params = dict(request.query_params)
                 payload = dict()
@@ -838,24 +1314,43 @@ class MAS(BaseModel):
             elif request.method == "POST":
                 payload = await request.json()
 
-            if "query" not in payload:
-                return WebResponse(code=400, message="query is required").to_dict()
+            current_trace_id = payload.get("current_trace_id", generate_uuid())
+            logger.info(
+                f"Received payload: {json.dumps(payload, ensure_ascii=False)}",
+                extra={"trace_id": current_trace_id},
+            )
+            payload = self.func_filter(payload)
 
-            if "attachments" in payload:
-                attachments_with_path = []
-                for attachment in payload["attachments"]:
-                    if attachment.startswith("http"):
-                        attachments_with_path.append(attachment)
-                    else:
-                        attachments_with_path.append(
-                            os.path.join(
-                                Config.get_cache_save_dir(), "uploads", attachment
-                            )
-                        )
-                payload["attachments"] = attachments_with_path
+            if "query" not in payload:
+                payload["query"] = ""
 
             if "current_trace_id" not in payload:
-                payload["current_trace_id"] = shortuuid.ShortUUID().random(length=16)
+                payload["current_trace_id"] = current_trace_id
+
+            # fetch headers
+            if "shared_data" not in payload:
+                payload["shared_data"] = dict()
+            payload["shared_data"]["_headers"] = dict(request.headers)
+
+            return payload
+
+        @app.api_route("/chat", methods=["GET", "POST"])
+        async def chat(request: Request):
+            payload = await request_to_payload(request)
+            # Apply request interceptor if configured
+            intercepted_response = self.func_interceptor(payload)
+            if intercepted_response is not None:
+                return intercepted_response
+            oxy_response = await self.chat_with_agent(payload=payload)
+            return oxy_response.output
+
+        @app.api_route("/sse/chat", methods=["GET", "POST"])
+        async def sse_chat(request: Request):
+            payload = await request_to_payload(request)
+            # Apply request interceptor if configured
+            intercepted_response = self.func_interceptor(payload)
+            if intercepted_response is not None:
+                return intercepted_response
             current_trace_id = payload["current_trace_id"]
 
             logger.info(
@@ -871,6 +1366,76 @@ class MAS(BaseModel):
                 self.event_stream(redis_key, current_trace_id, task)
             )
 
+        @app.api_route("/async/chat", methods=["GET", "POST"])
+        async def async_chat(request: Request):
+            payload = await request_to_payload(request)
+            # Apply request interceptor if configured
+            intercepted_response = self.func_interceptor(payload)
+            if intercepted_response is not None:
+                return intercepted_response
+
+            current_trace_id = payload["current_trace_id"]
+
+            logger.info(
+                "SSE connection established.",
+                extra={"trace_id": current_trace_id},
+            )
+            redis_key = f"{self.message_prefix}:{self.name}:{current_trace_id}"
+            task = asyncio.create_task(
+                self.chat_with_agent(payload=payload, send_msg_key=redis_key)
+            )
+            task.add_done_callback(
+                lambda future: self.active_tasks.pop(current_trace_id, None)
+            )
+            self.active_tasks[current_trace_id] = task
+            return WebResponse().to_dict()
+
+        @app.api_route("/async/trace", methods=["GET", "POST"])
+        async def async_trace(request: Request):
+            payload = await request_to_payload(request)
+            # Apply request interceptor if configured
+            intercepted_response = self.func_interceptor(payload)
+            if intercepted_response is not None:
+                return intercepted_response
+            trace_id = payload["trace_id"]
+            timestamp = payload["timestamp"]
+
+            logger.info(
+                "SSE connection established.",
+                extra={"trace_id": trace_id, "timestamp": timestamp},
+            )
+            redis_key = f"{self.message_prefix}:{self.name}:{trace_id}"
+            return EventSourceResponse(self.yield_async_message(redis_key, trace_id))
+
+        @app.api_route("/feedback", methods=["GET", "POST"])
+        async def feedback(request: Request):
+            payload = await request_to_payload(request)
+            channel_id = payload.get("channel_id", "")
+            if channel_id not in self.feedback_dict:
+                return WebResponse(code=400, message="illegal channel_id").to_dict()
+            queue = self.feedback_dict[channel_id]
+            data = payload.get("data", None)
+            await queue.put(data)
+            return WebResponse().to_dict()
+
+        async def log_and_open():
+            await asyncio.sleep(0.1)
+            url_prefix = os.getenv("OXYGENT_URL", f"http://{host}:{port}/")
+            web_url = url_prefix + "web/index.html"
+            logger.info(
+                f"The web page URL is: {web_url}, click to open.",
+                extra={"color": "yellow"},
+            )
+
+            # Automatically open the web page after a short delay
+            if Config.get_server_auto_open_webpage():
+                import webbrowser
+
+                if webbrowser.open(web_url):
+                    logger.info(
+                        "The web page has been opened.", extra={"color": "yellow"}
+                    )
+
         async def run_uvicorn():
             """Run the Uvicorn server with the FastAPI app."""
             logger.info("🔗 OxyGent MAS FastAPI Service Initialization")
@@ -881,23 +1446,14 @@ class MAS(BaseModel):
                 port=port,
                 log_level=Config.get_server_log_level().lower(),
                 log_config=None,
+                workers=Config.set_server_workers(),
             )
             server = uvicorn.Server(config)
-
+            asyncio.create_task(log_and_open())
             await server.serve()
 
         web_task = asyncio.create_task(run_uvicorn())
 
-        # Automatically open the web page after a short delay
-        if Config.get_server_auto_open_webpage():
-            import webbrowser
-
-            await asyncio.sleep(1)
-            web_url = f"http://{host}:{port}/web/index.html"
-            webbrowser.open(web_url)
-            logger.info(
-                f"The web page {web_url} has been opened.", extra={"color": "yellow"}
-            )
         await asyncio.gather(web_task)
 
     # ------------------------------------------------------------------
@@ -943,3 +1499,11 @@ class MAS(BaseModel):
         results = await asyncio.gather(*tasks)
         logger.info("done.")
         return results
+
+
+class BankRouter(APIRouter):
+    def __init__(self, *args, **kwargs):
+        super().__init__(tags=["bank"], *args, **kwargs)
+
+    def set_mas(self, mas: MAS):
+        self.mas = mas

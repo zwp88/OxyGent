@@ -8,7 +8,7 @@ OxyGent提供了非常丰富的参数供您自定义智能体的工作模式，
     oxy.ReActAgent(
         name="trust_agent",
         desc="a time query agent with trust mode enabled",
-        tools=["time"],
+        tools=["time_tools"],
         llm_model="default_llm",
         trust_mode=True,  # enable trust mode
         is_master=True,
@@ -22,8 +22,10 @@ trust mode output: Tool [get_current_time] execution result: {
   "timezone": "Asia/Shanghai",
   "datetime": "2025-07-24T20:26:19+08:00",
   "is_dst": false
-}
+} 
 ```
+
+如果开启了`trust_mode`，对于框架可以捕获的异常，或进行错误重试，否则`ReActAgent`会将错误上报。
 
 ## 完整的可运行样例
 
@@ -32,21 +34,21 @@ trust mode output: Tool [get_current_time] execution result: {
 ```python
 import asyncio
 from oxygent import MAS, oxy
-from oxygent.utils.env_utils import get_env_var
+import os
 
 oxy_space = [
     # LLM configuration
     oxy.HttpLLM(
         name="default_llm",
-        api_key=get_env_var("DEFAULT_LLM_API_KEY"),
-        base_url=get_env_var("DEFAULT_LLM_BASE_URL"),
-        model_name=get_env_var("DEFAULT_LLM_MODEL_NAME"),
+        api_key=os.getenv("DEFAULT_LLM_API_KEY"),
+        base_url=os.getenv("DEFAULT_LLM_BASE_URL"),
+        model_name=os.getenv("DEFAULT_LLM_MODEL_NAME"),
         llm_params={"temperature": 0.01},
         semaphore=4,
     ),
     # time tool
     oxy.StdioMCPClient(
-        name="time",
+        name="time_tools",
         params={
             "command": "uvx",
             "args": ["mcp-server-time", "--local-timezone=Asia/Shanghai"],
@@ -56,7 +58,7 @@ oxy_space = [
     oxy.ReActAgent(
         name="normal_agent",
         desc="a time query agent with trust mode disabled",
-        tools=["time"],
+        tools=["time_tools"],
         llm_model="default_llm",
         trust_mode=False,  # disable trust mode
     ),
@@ -64,7 +66,7 @@ oxy_space = [
     oxy.ReActAgent(
         name="trust_agent",
         desc="a time query agent with trust mode enabled",
-        tools=["time"],
+        tools=["time_tools"],
         llm_model="default_llm",
         trust_mode=True,  # enable trust mode
         is_master=True,

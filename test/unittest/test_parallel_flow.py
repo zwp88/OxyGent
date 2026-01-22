@@ -2,15 +2,16 @@
 Unit tests for ParallelFlow
 """
 
-import pytest
 from unittest.mock import AsyncMock
+
+import pytest
 
 from oxygent.oxy.flows.parallel_flow import ParallelFlow
 from oxygent.schemas import OxyRequest, OxyResponse, OxyState
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Dummy MAS  
+# Dummy MAS
 # ──────────────────────────────────────────────────────────────────────────────
 class DummyMAS:
     def __init__(self):
@@ -19,6 +20,7 @@ class DummyMAS:
         self.message_prefix = "msg"
         self.name = "test_mas"
         self.send_message = AsyncMock()
+        self.func_process_message = lambda dict_message, oxy_request: dict_message
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -81,4 +83,4 @@ async def test_execute_no_tools(monkeypatch, mas_env, oxy_request):
     resp = await empty_flow.execute(oxy_request)
     call_spy.assert_not_awaited()
     assert resp.state is OxyState.COMPLETED
-    assert resp.output.endswith(":") 
+    assert resp.output.endswith(":")

@@ -107,7 +107,6 @@ class PlanAndSolve(BaseFlow):
                 )
 
             task = plan_steps[0]
-            task = plan_steps[0]
             task_formatted = f"""
                 We have finished the following steps: {past_steps}
                 The current step to execute is:{task}

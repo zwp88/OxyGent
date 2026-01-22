@@ -5,16 +5,16 @@ executable within the OxyGent system. It automatically extracts input schemas fr
 function signatures and handles execution with proper error handling.
 """
 
+import logging
 from inspect import Parameter, signature
 from typing import Callable, Optional
 
-import logging
 from pydantic import Field
 from pydantic.fields import FieldInfo
+from pydantic_core import PydanticUndefined
 
 from ...schemas import OxyRequest, OxyResponse, OxyState
 from ..base_tool import BaseTool
-
 
 logger = logging.getLogger(__name__)
 
@@ -57,36 +57,38 @@ class FunctionTool(BaseTool):
         """
         sig = signature(func)
         schema = {"properties": {}, "required": []}
-        needs_oxy_request = False
 
         for name, param in sig.parameters.items():
             param_type = param.annotation
-            if param_type != Parameter.empty:
-                type_name = getattr(param_type, "__name__", str(param_type))
-                if type_name == "OxyRequest" or (
-                    hasattr(param_type, "__name__")
-                    and param_type.__name__ == "OxyRequest"
-                ):
-                    needs_oxy_request = True
-                    continue
-            # Get the type of parameter
-            param_type = param.annotation
-            # Handle the case where the type is not specified
+
+            # Get type name, handling empty annotations
             if param_type is Parameter.empty:
                 type_name = None
             else:
                 type_name = getattr(param_type, "__name__", str(param_type))
-            if isinstance(param.default, FieldInfo):
-                # Handle Pydantic Field annotations
-                desc = param.default.description or ""
-                schema["properties"][name] = {"description": desc, "type": type_name}
-                if param.default.is_required():
-                    schema["required"].append(name)
-            elif param.default is Parameter.empty:
-                schema["properties"][name] = {"description": "", "type": type_name}
-                schema["required"].append(name)
+                # Skip OxyRequest parameters
+                if type_name == "OxyRequest":
+                    self.needs_oxy_request = True
+                    continue
 
-        self.needs_oxy_request = needs_oxy_request
+            # Determine parameter properties based on default value
+            if isinstance(param.default, FieldInfo):
+                # Pydantic Field: extract description and required status from FieldInfo
+                description = param.default.description or ""
+                is_required = param.default.is_required()
+            elif param.default is Parameter.empty:
+                # No default value: parameter is required
+                description = ""
+                is_required = True
+            else:
+                # Has regular default value: parameter is optional
+                description = ""
+                is_required = False
+
+            # Add parameter to schema
+            schema["properties"][name] = {"description": description, "type": type_name}
+            if is_required:
+                schema["required"].append(name)
 
         return schema
 
@@ -94,23 +96,37 @@ class FunctionTool(BaseTool):
         """Execute the wrapped function with provided arguments."""
         try:
             func_kwargs = {}
-
             sig = signature(self.func_process)
 
             for param_name, param in sig.parameters.items():
-                if param.annotation != Parameter.empty:
-                    param_type = param.annotation
-                    type_name = getattr(param_type, "__name__", str(param_type))
+                param_type = param.annotation
 
-                    if type_name == "OxyRequest" or (
-                        hasattr(param_type, "__name__")
-                        and param_type.__name__ == "OxyRequest"
-                    ):
+                # Get type name, handling empty annotations
+                if param_type is Parameter.empty:
+                    type_name = None
+                else:
+                    type_name = getattr(param_type, "__name__", str(param_type))
+                    # Handle OxyRequest parameters
+                    if type_name == "OxyRequest":
                         func_kwargs[param_name] = oxy_request
-                    elif param_name in oxy_request.arguments:
-                        func_kwargs[param_name] = oxy_request.arguments[param_name]
-                elif param_name in oxy_request.arguments:
+                        continue
+
+                # Process parameter value based on availability in arguments
+                if param_name in oxy_request.arguments:
                     func_kwargs[param_name] = oxy_request.arguments[param_name]
+                else:
+                    # Handle missing arguments - use parameter default if available
+                    if isinstance(param.default, FieldInfo):
+                        func_kwargs[param_name] = (
+                            param.default.default
+                            if param.default.default is not PydanticUndefined
+                            else None
+                        )
+                    elif param.default is not Parameter.empty:
+                        func_kwargs[param_name] = param.default
+                    else:
+                        # No default value available, pass None
+                        func_kwargs[param_name] = None
 
             result = await self.func_process(**func_kwargs)
             return OxyResponse(state=OxyState.COMPLETED, output=result)

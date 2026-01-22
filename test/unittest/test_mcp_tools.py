@@ -2,8 +2,9 @@
 Unit tests for MCPTool
 """
 
-import pytest
 from unittest.mock import AsyncMock
+
+import pytest
 
 from oxygent.oxy.mcp_tools.mcp_tool import MCPTool
 from oxygent.schemas import OxyRequest, OxyResponse, OxyState
@@ -26,7 +27,7 @@ class DummyMCPClient:
 @pytest.fixture
 def mcp_client():
     cli = DummyMCPClient()
-    cli._execute.side_effect = cli.execute_ok        
+    cli._execute.side_effect = cli.execute_ok
     return cli
 
 

@@ -22,7 +22,7 @@
     <script src="./js/mermaid-sdk-gantt.js?time=2"></script>
     <script src="./js/utils.js?time=2"></script>
     <script src='./js/autosize.js?time=2'></script>
-    <script src="js/flowchart.js?time=2"></script>
+    <script src="./js/flowchart.js?time=2"></script>
 </head>
 <body>
 
@@ -77,7 +77,7 @@
                     <span id="node_type" class="tagspan"></span>
                 </div>
             </div>
-            <span class="metaInfo">create_time: <span id="node_create_time"></span></span>
+            <!-- <span class="metaInfo">create_time: <span id="node_create_time"></span></span> -->
             <span id="trace_id" class="metaInfo"></span>
             <span class="metaInfo">caller: <span id="node_caller" class="ellipsisspan metaInfo"></span></span>
         </div>
@@ -152,8 +152,12 @@
     ];
 
     const typeMap = {
-        tool: './image/org_tool.svg',
         llm: './image/org_model.svg',
+        tool: './image/org_tool.svg',
+        model: './image/org_model.svg',
+        flow: './image/org_flow.svg',
+        bank: './image/org_knowledge.svg',
+        memory_bank: './image/org_memory.svg',
     };
 
     const urlParams = new URLSearchParams(window.location.search);
@@ -696,7 +700,7 @@
         // 获取当前窗口的高度
         const windowHeight = window.innerHeight;
         // 计算可用高度
-        const availableHeight = windowHeight - currentTop - 50;
+        const availableHeight = windowHeight - currentTop - 35;
         // 设置高度
         modLeftClassAttrId.style.height = availableHeight + 'px';
         modLeftClassAttrId.style.overflow = 'auto';

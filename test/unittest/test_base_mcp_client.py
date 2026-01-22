@@ -3,12 +3,13 @@ Unit tests for BaseMCPClient
 """
 
 import types
-import pytest
 from unittest.mock import AsyncMock
 
+import pytest
+
 from oxygent.oxy.mcp_tools.base_mcp_client import BaseMCPClient
-from oxygent.schemas import OxyRequest, OxyState
 from oxygent.oxy.mcp_tools.mcp_tool import MCPTool
+from oxygent.schemas import OxyRequest, OxyState
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -45,9 +46,7 @@ class MockSession:
             return_value=[("tools", [MockMCPToolInfo("dummy_tool")])]
         )
         self.call_tool = AsyncMock(
-            return_value=types.SimpleNamespace(
-                content=[MockContent("hello-world")]
-            )
+            return_value=types.SimpleNamespace(content=[MockContent("hello-world")])
         )
 
 

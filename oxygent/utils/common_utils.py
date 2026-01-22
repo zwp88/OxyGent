@@ -5,6 +5,7 @@ import base64
 import hashlib
 import json
 import logging
+import mimetypes
 import os
 import platform
 import re
@@ -16,6 +17,7 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 import aiofiles
 import httpx
+import shortuuid
 from PIL import Image
 from pydantic import AnyUrl
 
@@ -37,8 +39,12 @@ def get_mac_address():
     return mac_address
 
 
-def get_timestamp():
+def get_timestamp_str():
     return str(datetime.now().timestamp())
+
+
+def get_timestamp():
+    return datetime.now().timestamp() * 1000
 
 
 def get_format_time():
@@ -90,7 +96,9 @@ async def source_to_bytes(source: str):
             return await f.read()
 
 
-async def image_to_base64(source: str, max_image_pixels: int = 10000000) -> str:
+async def image_to_base64(
+    source: str, max_image_pixels: int = 10000000, base64_prefix="data:image"
+) -> str:
     image_bytes = await source_to_bytes(source)
 
     def process_image(image_bytes):
@@ -112,18 +120,86 @@ async def image_to_base64(source: str, max_image_pixels: int = 10000000) -> str:
             return output.getvalue()
 
     image_bytes = await asyncio.to_thread(process_image, image_bytes)
-    ext = os.path.splitext(source)[-1][1: ]
-    return f"data:image/{ext};base64,{base64.b64encode(image_bytes).decode('utf-8')}"
+    return f"{base64_prefix};base64,{base64.b64encode(image_bytes).decode('utf-8')}"
 
 
 # 512 * 1024 * 1024 bytes == 512MB
-async def video_to_base64(source: str, max_video_size: int = 512 * 1024 * 1024) -> str:
+async def video_to_base64(
+    source: str, max_video_size: int = 512 * 1024 * 1024, base64_prefix="data:video"
+) -> str:
     video_bytes = await source_to_bytes(source)
     if len(video_bytes) > max_video_size:
         return source
     else:
-        ext = os.path.splitext(source)[-1][1: ]
-        return f"data:video/{ext};base64,{base64.b64encode(video_bytes).decode('utf-8')}"
+        return f"{base64_prefix};base64,{base64.b64encode(video_bytes).decode('utf-8')}"
+
+
+async def table_to_base64(source: str, max_table_size: int = 50 * 1024 * 1024) -> str:
+    """Convert table files to base64 encoding.
+
+    Args:
+        source: File path or URL
+        max_table_size: Maximum file size (default 50MB)
+
+    Returns:
+        Base64 encoded string with data URI format
+    """
+    table_bytes = await source_to_bytes(source)
+    if len(table_bytes) > max_table_size:
+        raise ValueError(
+            f"Table file size ({len(table_bytes)} bytes) exceeds maximum allowed size ({max_table_size} bytes)"
+        )
+
+    file_ext = os.path.splitext(source.lower())[1]
+    mime_type_map = {
+        ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ".xls": "application/vnd.ms-excel",
+        ".csv": "text/csv",
+        ".tsv": "text/tab-separated-values",
+        ".ods": "application/vnd.oasis.opendocument.spreadsheet",
+    }
+
+    mime_type = mime_type_map.get(file_ext, "application/octet-stream")
+    return f"data:{mime_type};base64,{base64.b64encode(table_bytes).decode('utf-8')}"
+
+
+async def file_to_base64(source: str, max_file_size: int = 10 * 1024 * 1024) -> str:
+    """For small non-media files (<10 MB) return a data-URI, otherwise回传原路径/URL."""
+    file_bytes = await source_to_bytes(source)
+    if len(file_bytes) > max_file_size:
+        return source
+    mime_type, _ = mimetypes.guess_type(source)
+    if not mime_type:
+        mime_type = "application/octet-stream"
+    return f"data:{mime_type};base64,{base64.b64encode(file_bytes).decode()}"
+
+
+def validate_table_file(file_path: str) -> bool:
+    """Validate if the file is a supported table format."""
+    supported_extensions = (".xlsx", ".xls", ".csv", ".tsv", ".ods")
+    return file_path.lower().endswith(supported_extensions)
+
+
+def get_table_file_info(file_path: str) -> dict:
+    """Get basic information about a table file."""
+
+    if not os.path.exists(file_path) and not file_path.startswith("http"):
+        return {"error": "File not found"}
+
+    try:
+        file_size = (
+            os.path.getsize(file_path) if not file_path.startswith("http") else None
+        )
+        file_ext = os.path.splitext(file_path.lower())[1][1:]
+
+        return {
+            "filename": os.path.basename(file_path),
+            "extension": file_ext,
+            "size": file_size,
+            "is_supported": validate_table_file(file_path),
+        }
+    except Exception as e:
+        return {"error": str(e)}
 
 
 def append_url_path(url, path):
@@ -210,25 +286,105 @@ def to_json(obj):
     return json.dumps(obj, ensure_ascii=False, default=str)
 
 
-def process_attachments(attachments):
-    query_attachments = []
-    for attachment in attachments:
-        if not attachment.startswith("http") and not os.path.exists(attachment):
-            logger.warning(f"Attachment file not found: {attachment}")
-            continue
+def generate_uuid(length=16):
+    return shortuuid.ShortUUID().random(length=length)
 
-        if attachment.endswith((".png", ".jpg", ".jpeg", ".gif", ".bmp")):
-            query_attachments.append(
-                {
-                    "type": "image_url",
-                    "image_url": {"url": attachment},
-                }
-            )
-        elif attachment.endswith((".mp4", ".avi", ".mov", ".wmv", ".flv")):
-            query_attachments.append(
-                {
-                    "type": "video_url",
-                    "video_url": {"url": attachment},
-                }
-            )
-    return query_attachments
+
+def is_image(source):
+    exts = ("png", "jpg", "jpeg", "gif", "svg", "bmp", "webp", "tiff")
+    return source.split(".")[-1] in exts
+
+
+def parse_mixed_string(s):
+    if not isinstance(s, str):
+        return s
+
+    url_to_ext = {
+        "image_url": ("png", "jpg", "jpeg", "gif", "svg", "bmp", "webp", "tiff"),
+        "video_url": ("mp4", "avi", "mov", "wmv", "flv", "webm", "mkv"),
+    }
+    ext_to_url = {ext: k for k, exts in url_to_ext.items() for ext in exts}
+
+    # 正则匹配 ![描述](链接) 或 ![](链接)
+    pattern = re.compile(r"(!)?\[([^\]]*)\]\(([^)]+)\)")
+    results = []
+    last_end = 0
+
+    for match in pattern.finditer(s):
+        start, end = match.span()
+        # 先处理前面的文本
+        if start > last_end:
+            text = s[last_end:start]
+            if text:
+                results.append({"type": "text", "content": text})
+        # 处理文件
+        is_image = match.group(1)
+        desc = match.group(2)
+        link = match.group(3)
+        content_type = ext_to_url.get(link.split(".")[-1], "doc_url")
+        results.append(
+            {
+                "type": content_type,
+                "content": f"{'!' if is_image else ''}[{desc}]({link})",
+                "desc": desc,
+                "link": link,
+            }
+        )
+        last_end = end
+
+    # 处理最后的文本
+    if last_end < len(s):
+        text = s[last_end:]
+        if text:
+            results.append({"type": "text", "content": text})
+
+    return results
+
+
+def parse_mixed_string0(s):
+    if not isinstance(s, str):
+        return s
+
+    url_to_ext = {
+        "image_url": ("png", "jpg", "jpeg", "gif", "svg", "bmp", "webp", "tiff"),
+        "video_url": ("mp4", "avi", "mov", "wmv", "flv", "webm", "mkv"),
+    }
+    ext_to_url = {ext: k for k, exts in url_to_ext.items() for ext in exts}
+
+    # 正则匹配 ![描述](链接) 或 ![](链接)
+    pattern = re.compile(r"!?\[([^\]]*)\]\(([^)]+)\)")
+    results = []
+    last_end = 0
+
+    for match in pattern.finditer(s):
+        start, end = match.span()
+        # 先处理前面的文本
+        if start > last_end:
+            text = s[last_end:start]
+            if text:
+                results.append({"type": "text", "text": text})
+        # 处理文件
+        desc = match.group(1)
+        if desc:
+            results.append({"type": "text", "text": f"the {desc} is: "})
+        link = match.group(2)
+        content_type = ext_to_url.get(link.split(".")[-1], "doc_url")
+        if content_type in url_to_ext:
+            results.append({"type": content_type, content_type: {"url": link}})
+        else:
+            # TODO: 处理其他类型的文件
+            with open(link) as f:
+                results.append({"type": "text", "text": f.read()})
+        last_end = end
+
+    # 如果没有匹配到，则直接返回原始字符串
+    if last_end == 0:
+        return [{"type": "text", "text": s}]
+
+    # 处理最后的文本
+    if last_end < len(s):
+        text = s[last_end:]
+        if text:
+            results.append({"type": "text", "text": text})
+
+    return results

@@ -39,7 +39,6 @@ class Config:
             "name": "app",
             "version": "1.0.0",
         },
-        "env": {"path": ".env", "is_override": False},
         "log": {
             "path": "./cache_dir/app.log",
             "level_root": "INFO",
@@ -53,37 +52,74 @@ class Config:
             "is_detailed_tool_call": True,
             "is_detailed_observation": True,
         },
-        "llm": {    
-            "cls": "oxygent.llms.OllamaLLM",
-            "base_url": "http://localhost:11434",
-            "temperature": 0.1, 
-            "max_tokens": 4096, 
-            "top_p": 1
+        "llm": {
+            "temperature": 0.1,
+            "max_tokens": 4096,
+            "top_p": 1,
+            "semaphore": 16,
+            "timeout": 300,
         },
-        "cache": {"save_dir": "./cache_dir"},
+        "cache": {
+            "save_dir": "./cache_dir",
+        },
         "message": {
             "is_send_tool_call": True,
             "is_send_observation": True,
-            "is_send_think": False,
+            "is_send_think": True,
             "is_send_answer": True,
             "is_stored": False,
+            "stream_batch_size": 256,
+            "is_show_in_terminal": False,
+            "is_send_full_arguments": False,
         },
         "vearch": {},
         "es": {},
+        "es_schema": {
+            "shared_data": {"type": "text"},
+            "group_data": {"type": "text"},
+        },
+        "es_settings": {
+            "number_of_shards": 1,
+            "number_of_replicas": 1,
+        },
         "redis": {},
+        "redis_param": {
+            "expire_time": 86400,  # 24 hours 60 * 60 * 24
+            "max_size": 1024,
+            "max_length": 20480,  # 20MB
+        },
         "server": {
             "host": "127.0.0.1",
             "port": 8080,
             "auto_open_webpage": True,
             "log_level": "INFO",
+            "workers": 1,
+        },
+        "oxy": {
+            "semaphore": 1024,
+            "timeout": 3600,
+            "retries": 2,
+            "delay": 1.0,
         },
         "agent": {
             "prompt": "",
-            "llm_model": "",
+            "llm_model": "default_llm",
             "input_schema": {
                 "properties": {"query": {"description": "Query question"}},
                 "required": ["query"],
             },
+            "short_memory_size": 10,
+            "welcome_message": "Hi, I’m OxyGent. How can I assist you?",
+        },
+        "tool": {
+            "mcp_is_keep_alive": True,
+            "is_concurrent_init": True,
+            "semaphore": 1024,
+            "timeout": 60,
+        },
+        "live_prompt": {
+            "is_active": False,
+            "es_polling_interval": 2,  # ES polling interval in seconds for version sync
         },
     }
 
@@ -144,32 +180,6 @@ class Config:
     @classmethod
     def get_app_version(cls):
         return cls.get_module_config("app", "version")
-
-    """ env """
-
-    @classmethod
-    def set_env_config(cls, env_config):
-        return cls.set_module_config("env", env_config)
-
-    @classmethod
-    def get_env_config(cls):
-        return cls.get_module_config("env")
-
-    @classmethod
-    def set_env_path(cls, path=".env"):
-        cls.set_module_config("env", "path", path)
-
-    @classmethod
-    def get_env_path(cls):
-        return cls.get_module_config("env", "path")
-
-    @classmethod
-    def set_env_is_override(cls, is_override=True):
-        cls.set_module_config("env", "is_override", is_override)
-
-    @classmethod
-    def get_env_is_override(cls):
-        return cls.get_module_config("env", "is_override")
 
     """ log """
 
@@ -286,8 +296,28 @@ class Config:
         return cls.set_module_config("llm", llm_config)
 
     @classmethod
-    def get_llm_config(cls):
-        return cls.get_module_config("llm")
+    def get_llm_config(cls, exclude=None):
+        if exclude is None:
+            exclude = []
+        return {
+            k: v for k, v in cls.get_module_config("llm").items() if k not in exclude
+        }
+
+    @classmethod
+    def set_llm_semaphore(cls, semaphore):
+        cls.set_module_config("llm", "semaphore", semaphore)
+
+    @classmethod
+    def get_llm_semaphore(cls):
+        return cls.get_module_config("llm", "semaphore")
+
+    @classmethod
+    def set_llm_timeout(cls, timeout):
+        cls.set_module_config("llm", "timeout", timeout)
+
+    @classmethod
+    def get_llm_timeout(cls):
+        return cls.get_module_config("llm", "timeout")
 
     """ cache """
 
@@ -362,6 +392,32 @@ class Config:
     def get_message_is_stored(cls):
         return cls.get_module_config("message", "is_stored")
 
+    @classmethod
+    def set_message_stream_batch_size(cls, stream_batch_size=128):
+        cls.set_module_config("message", "stream_batch_size", stream_batch_size)
+
+    @classmethod
+    def get_message_stream_batch_size(cls):
+        return cls.get_module_config("message", "stream_batch_size")
+
+    @classmethod
+    def set_message_is_show_in_terminal(cls, is_show_in_terminal=True):
+        cls.set_module_config("message", "is_show_in_terminal", is_show_in_terminal)
+
+    @classmethod
+    def get_message_is_show_in_terminal(cls):
+        return cls.get_module_config("message", "is_show_in_terminal")
+
+    @classmethod
+    def set_message_is_send_full_arguments(cls, is_send_full_arguments=True):
+        cls.set_module_config(
+            "message", "is_send_full_arguments", is_send_full_arguments
+        )
+
+    @classmethod
+    def get_message_is_send_full_arguments(cls):
+        return cls.get_module_config("message", "is_send_full_arguments")
+
     """ es """
 
     @classmethod
@@ -371,6 +427,48 @@ class Config:
     @classmethod
     def get_es_config(cls):
         return cls.get_module_config("es")
+
+    """ es_schema """
+
+    @classmethod
+    def set_es_schema_config(cls, es_schema_config):
+        cls.set_module_config("es_schema", es_schema_config)
+
+    @classmethod
+    def get_es_schema_config(cls) -> dict:
+        return cls.get_module_config("es_schema")
+
+    @classmethod
+    def set_es_schema_shared_data(cls, es_schema_config):
+        return cls.set_module_config("es_schema", "shared_data", es_schema_config)
+
+    @classmethod
+    def get_es_schema_shared_data(cls) -> dict:
+        shared_data_schema = cls.get_module_config("es_schema", "shared_data")
+        if "properties" in shared_data_schema and "type" in shared_data_schema:
+            del shared_data_schema["type"]
+        return shared_data_schema
+
+    @classmethod
+    def set_es_schema_group_data(cls, es_schema_config):
+        return cls.set_module_config("es_schema", "group_data", es_schema_config)
+
+    @classmethod
+    def get_es_schema_group_data(cls) -> dict:
+        group_data_schema = cls.get_module_config("es_schema", "group_data")
+        if "properties" in group_data_schema and "type" in group_data_schema:
+            del group_data_schema["type"]
+        return group_data_schema
+
+    """ es_settings """
+
+    @classmethod
+    def set_es_settings_config(cls, es_settings_config):
+        cls.set_module_config("es_settings", es_settings_config)
+
+    @classmethod
+    def get_es_settings_config(cls) -> dict:
+        return cls.get_module_config("es_settings")
 
     """ vearch """
 
@@ -395,6 +493,32 @@ class Config:
     @classmethod
     def get_redis_config(cls):
         return cls.get_module_config("redis")
+
+    """ redis_param """
+
+    @classmethod
+    def set_redis_expire_time(cls, expire_time):
+        cls.set_module_config("redis_param", "expire_time", expire_time)
+
+    @classmethod
+    def get_redis_expire_time(cls):
+        return cls.get_module_config("redis_param", "expire_time")
+
+    @classmethod
+    def set_redis_max_size(cls, max_size):
+        cls.set_module_config("redis_param", "max_size", max_size)
+
+    @classmethod
+    def get_redis_max_size(cls):
+        return cls.get_module_config("redis_param", "max_size")
+
+    @classmethod
+    def set_redis_max_length(cls, max_length):
+        cls.set_module_config("redis_param", "max_length", max_length)
+
+    @classmethod
+    def get_redis_max_length(cls):
+        return cls.get_module_config("redis_param", "max_length")
 
     """ server """
 
@@ -446,6 +570,58 @@ class Config:
     def get_server_log_level(cls):
         return cls.get_module_config("server", "log_level")
 
+    @classmethod
+    def set_server_workers(cls, workers=None):
+        if workers is None:
+            workers = os.cpu_count() * 2 + 1
+        cls.set_module_config("server", "workers", workers)
+
+    @classmethod
+    def get_server_workers(cls):
+        return cls.get_module_config("server", "workers")
+
+    """ oxy """
+
+    @classmethod
+    def set_oxy_config(cls, oxy_config):
+        cls.set_module_config("oxy", oxy_config)
+
+    @classmethod
+    def get_oxy_config(cls):
+        return cls.get_module_config("oxy")
+
+    @classmethod
+    def set_oxy_semaphore(cls, semaphore):
+        cls.set_module_config("oxy", "semaphore", semaphore)
+
+    @classmethod
+    def get_oxy_semaphore(cls):
+        return cls.get_module_config("oxy", "semaphore")
+
+    @classmethod
+    def set_oxy_timeout(cls, timeout):
+        cls.set_module_config("oxy", "timeout", timeout)
+
+    @classmethod
+    def get_oxy_timeout(cls):
+        return cls.get_module_config("oxy", "timeout")
+
+    @classmethod
+    def set_oxy_retries(cls, retries):
+        cls.set_module_config("oxy", "retries", retries)
+
+    @classmethod
+    def get_oxy_retries(cls):
+        return cls.get_module_config("oxy", "retries")
+
+    @classmethod
+    def set_oxy_delay(cls, delay):
+        cls.set_module_config("oxy", "delay", delay)
+
+    @classmethod
+    def get_oxy_delay(cls):
+        return cls.get_module_config("oxy", "delay")
+
     """ agent """
 
     @classmethod
@@ -479,3 +655,87 @@ class Config:
     @classmethod
     def get_agent_input_schema(cls):
         return cls.get_module_config("agent", "input_schema")
+
+    @classmethod
+    def set_agent_short_memory_size(cls, short_memory_size):
+        cls.set_module_config("agent", "short_memory_size", short_memory_size)
+
+    @classmethod
+    def get_agent_short_memory_size(cls):
+        return cls.get_module_config("agent", "short_memory_size")
+
+    @classmethod
+    def set_agent_welcome_message(cls, welcome_message):
+        cls.set_module_config("agent", "welcome_message", welcome_message)
+
+    @classmethod
+    def get_agent_welcome_message(cls):
+        return cls.get_module_config("agent", "welcome_message")
+
+    """ tool """
+
+    @classmethod
+    def set_tool_config(cls, tool_config):
+        cls.set_module_config("tool", tool_config)
+
+    @classmethod
+    def get_tool_config(cls):
+        return cls.get_module_config("tool")
+
+    @classmethod
+    def set_tool_mcp_is_keep_alive(cls, mcp_is_keep_alive):
+        cls.set_module_config("tool", "mcp_is_keep_alive", mcp_is_keep_alive)
+
+    @classmethod
+    def get_tool_mcp_is_keep_alive(cls):
+        return cls.get_module_config("tool", "mcp_is_keep_alive")
+
+    @classmethod
+    def set_tool_is_concurrent_init(cls, is_concurrent_init):
+        cls.set_module_config("tool", "is_concurrent_init", is_concurrent_init)
+
+    @classmethod
+    def get_tool_is_concurrent_init(cls):
+        return cls.get_module_config("tool", "is_concurrent_init")
+
+    @classmethod
+    def set_tool_semaphore(cls, semaphore):
+        cls.set_module_config("tool", "semaphore", semaphore)
+
+    @classmethod
+    def get_tool_semaphore(cls):
+        return cls.get_module_config("tool", "semaphore")
+
+    @classmethod
+    def set_tool_timeout(cls, timeout):
+        cls.set_module_config("tool", "timeout", timeout)
+
+    @classmethod
+    def get_tool_timeout(cls):
+        return cls.get_module_config("tool", "timeout")
+
+    """ live_prompt """
+
+    @classmethod
+    def set_live_prompt_config(cls, live_prompt_config):
+        cls.set_module_config("live_prompt", live_prompt_config)
+
+    @classmethod
+    def get_live_prompt_config(cls):
+        return cls.get_module_config("live_prompt")
+
+    @classmethod
+    def set_live_prompt_is_active(cls, is_active):
+        cls.set_module_config("live_prompt", "is_active", is_active)
+
+    @classmethod
+    def get_live_prompt_is_active(cls):
+        return cls.get_module_config("live_prompt", "is_active")
+
+    @classmethod
+    def set_live_prompt_es_polling_interval(cls, es_polling_interval):
+        cls.set_module_config("live_prompt", "es_polling_interval", es_polling_interval)
+
+    @classmethod
+    def get_live_prompt_es_polling_interval(cls):
+        return cls.get_module_config("live_prompt", "es_polling_interval")

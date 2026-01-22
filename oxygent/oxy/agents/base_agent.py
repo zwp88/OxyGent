@@ -12,7 +12,7 @@ from pydantic import Field
 
 from ...config import Config
 from ...schemas import OxyRequest, OxyResponse
-from ...utils.common_utils import get_format_time, to_json
+from ...utils.common_utils import generate_uuid, get_format_time, to_json
 from ..base_flow import BaseFlow
 
 logger = logging.getLogger(__name__)
@@ -87,15 +87,43 @@ class BaseAgent(BaseFlow):
 
         if oxy_request.caller_category == "user":
             if self.mas and self.mas.es_client:
+                # save shared_data
+                shared_data_schema = Config.get_es_schema_shared_data().get(
+                    "properties", {}
+                )
+                if shared_data_schema:
+                    to_save_shared_data = {
+                        k: v
+                        for k, v in oxy_request.shared_data.items()
+                        if k in shared_data_schema
+                    }
+                else:
+                    to_save_shared_data = to_json(oxy_request.shared_data)
+                # save group_data
+                group_data_schema = Config.get_es_schema_group_data().get(
+                    "properties", {}
+                )
+                if group_data_schema:
+                    to_save_group_data = {
+                        k: v
+                        for k, v in oxy_request.group_data.items()
+                        if k in group_data_schema
+                    }
+                else:
+                    to_save_group_data = to_json(oxy_request.group_data)
                 # Store the current conversation trace record
                 await self.mas.es_client.index(
                     Config.get_app_name() + "_trace",
                     doc_id=oxy_request.current_trace_id,
                     body={
+                        "request_id": oxy_request.request_id,
                         "trace_id": oxy_request.current_trace_id,
+                        "shared_data": to_save_shared_data,
+                        "group_id": oxy_request.group_id,
+                        "group_data": to_save_group_data,
                         "from_trace_id": oxy_request.from_trace_id,
                         "root_trace_ids": oxy_request.root_trace_ids,
-                        "input": oxy_request.arguments,
+                        "input": to_json(oxy_request.arguments),
                         "callee": oxy_request.callee,
                         "output": "",  # Output will be filled in post_save_data
                         "create_time": get_format_time(),
@@ -120,11 +148,39 @@ class BaseAgent(BaseFlow):
         if oxy_request.caller_category == "user":
             # Update trace record with the response output
             if self.mas and self.mas.es_client:
+                # save shared_data
+                shared_data_schema = Config.get_es_schema_shared_data().get(
+                    "properties", {}
+                )
+                if shared_data_schema:
+                    to_save_shared_data = {
+                        k: v
+                        for k, v in oxy_request.shared_data.items()
+                        if k in shared_data_schema
+                    }
+                else:
+                    to_save_shared_data = to_json(oxy_request.shared_data)
+                # save group_data
+                group_data_schema = Config.get_es_schema_group_data().get(
+                    "properties", {}
+                )
+                if group_data_schema:
+                    to_save_group_data = {
+                        k: v
+                        for k, v in oxy_request.group_data.items()
+                        if k in group_data_schema
+                    }
+                else:
+                    to_save_group_data = to_json(oxy_request.group_data)
                 await self.mas.es_client.index(
                     Config.get_app_name() + "_trace",
                     doc_id=oxy_request.current_trace_id,
                     body={
+                        "request_id": oxy_request.request_id,
                         "trace_id": oxy_request.current_trace_id,
+                        "shared_data": to_save_shared_data,
+                        "group_id": oxy_request.group_id,
+                        "group_data": to_save_group_data,
                         "from_trace_id": oxy_request.from_trace_id,
                         "root_trace_ids": oxy_request.root_trace_ids,
                         "input": to_json(oxy_request.arguments),
@@ -139,24 +195,20 @@ class BaseAgent(BaseFlow):
         # Save conversation history if requested
         if oxy_request.is_save_history:
             if self.mas and self.mas.es_client:
-                # Create a unique sub-session identifier
-                current_sub_session_id = (
-                    oxy_request.current_trace_id + "__" + oxy_request.session_name
-                )
-
                 # Prepare history data with query-answer pair
                 history = {
                     "query": oxy_request.get_query(),
-                    "answer": oxy_response.output,
+                    "answer": str(oxy_response.output),
                 }
                 history.update(oxy_response.extra)
 
                 # Store the conversation history record
+                history_id = generate_uuid()
                 await self.mas.es_client.index(
                     Config.get_app_name() + "_history",
-                    doc_id=current_sub_session_id,
+                    doc_id=history_id,
                     body={
-                        "sub_session_id": current_sub_session_id,
+                        "history_id": history_id,
                         "session_name": oxy_request.session_name,
                         "trace_id": oxy_request.current_trace_id,
                         "memory": to_json(history),

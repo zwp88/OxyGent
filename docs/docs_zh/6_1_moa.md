@@ -6,7 +6,7 @@
     oxy.ReActAgent(
         name="time_agent",
         desc="A tool for time query",
-        tools=["time"],
+        tools=["time_tools"],
         llm_model="default_llm",
         team_size=2,
     ),

@@ -5,16 +5,16 @@ Unit tests for HttpLLM
 import pytest
 
 from oxygent.oxy.llms.http_llm import HttpLLM
-from oxygent.schemas import OxyRequest, OxyState, OxyResponse
+from oxygent.schemas import OxyRequest, OxyResponse, OxyState
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Helper: mock Config.get_llm_config() 
+# Helper: mock Config.get_llm_config()
 # ──────────────────────────────────────────────────────────────────────────────
 @pytest.fixture(autouse=True)
 def config_patch(monkeypatch):
     monkeypatch.setattr(
-        "oxygent.oxy.llms.http_llm.Config.get_llm_config", lambda: {}, raising=True
+        "oxygent.oxy.llms.http_llm.Config.get_llm_config", lambda **kwargs: {}, raising=True
     )
 
 
@@ -60,16 +60,13 @@ def oxy_request():
 # ──────────────────────────────────────────────────────────────────────────────
 @pytest.mark.asyncio
 async def test_execute_success(monkeypatch, llm, oxy_request):
+    oxy_request.arguments["stream"] = False
     captured = {}
 
     # ----- mock httpx.AsyncClient ------------------------------------------------
     class FakeResponse:
         def json(self):
-            return {
-                "choices": [
-                    {"message": {"content": "Hi there!"}}
-                ]
-            }
+            return {"choices": [{"message": {"content": "Hi there!"}}]}
 
         def raise_for_status(self):
             pass
@@ -87,7 +84,9 @@ async def test_execute_success(monkeypatch, llm, oxy_request):
             captured["payload"] = json
             return FakeResponse()
 
-    monkeypatch.setattr("oxygent.oxy.llms.http_llm.httpx.AsyncClient", lambda *a, **k: FakeClient())
+    monkeypatch.setattr(
+        "oxygent.oxy.llms.http_llm.httpx.AsyncClient", lambda *a, **k: FakeClient()
+    )
 
     # ---------------------------------------------------------------------------
     resp: OxyResponse = await llm._execute(oxy_request)
@@ -100,13 +99,14 @@ async def test_execute_success(monkeypatch, llm, oxy_request):
 
     pay = captured["payload"]
     assert pay["model"] == "gpt-ut"
-    assert pay["temperature"] == 0.3            # llm_params
-    assert pay["top_p"] == 0.9                 
+    assert pay["temperature"] == 0.3  # llm_params
+    assert pay["top_p"] == 0.9
     assert pay["messages"][0]["content"] == "Hello, LLM"
 
 
 @pytest.mark.asyncio
 async def test_execute_http_error(monkeypatch, llm, oxy_request):
+    oxy_request.arguments["stream"] = False
 
     class FakeErrResponse(Exception):
         pass
@@ -118,8 +118,10 @@ async def test_execute_http_error(monkeypatch, llm, oxy_request):
     class FakeClient:
         async def __aenter__(self):
             return self
+
         async def __aexit__(self, exc_type, exc, tb):
             return False
+
         async def post(self, *a, **kw):
             return ErrResp()
 
@@ -129,4 +131,3 @@ async def test_execute_http_error(monkeypatch, llm, oxy_request):
 
     with pytest.raises(FakeErrResponse):
         await llm._execute(oxy_request)
-

@@ -9,22 +9,28 @@ This test suite verifies the core behaviors of the Oxy abstract base class, incl
 Because Oxy is abstract, we define a DummyOxy subclass for testing.
 """
 
-import pytest
 import asyncio
+
+import pytest
+
 from oxygent.oxy.base_oxy import Oxy
 from oxygent.schemas import OxyRequest, OxyResponse, OxyState
+
 
 # Define a dummy subclass to implement the abstract method _execute
 class DummyOxy(Oxy):
     async def _execute(self, oxy_request: OxyRequest) -> OxyResponse:
-        return OxyResponse(state=OxyState.COMPLETED, output="dummy_output", oxy_request=oxy_request)
+        return OxyResponse(
+            state=OxyState.COMPLETED, output="dummy_output", oxy_request=oxy_request
+        )
 
-@pytest.mark.asyncio
+
 class TestBaseOxy:
     @pytest.fixture
     def dummy_oxy(self):
         return DummyOxy(name="dummy", desc="dummy desc", category="tool")
 
+    @pytest.mark.asyncio
     async def test_initialization(self, dummy_oxy):
         """Test attribute initialization of DummyOxy."""
         assert dummy_oxy.name == "dummy"
@@ -50,9 +56,12 @@ class TestBaseOxy:
         assert "tool_b" in dummy_oxy.permitted_tool_name_list
         assert "tool_c" in dummy_oxy.permitted_tool_name_list
 
+    @pytest.mark.asyncio
     async def test_execute_runs_lifecycle(self, dummy_oxy):
         """Test that the execute method runs end-to-end returning OxyResponse."""
-        oxy_request = OxyRequest(arguments={}, caller="test", current_trace_id="trace123")
+        oxy_request = OxyRequest(
+            arguments={}, caller="test", current_trace_id="trace123"
+        )
         response = await dummy_oxy.execute(oxy_request)
         assert isinstance(response, OxyResponse)
         assert response.state == OxyState.COMPLETED

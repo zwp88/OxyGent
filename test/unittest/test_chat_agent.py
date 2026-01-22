@@ -3,11 +3,13 @@ Unit tests for ChatAgent (_execute flow)
 
 """
 
-import pytest
 from unittest.mock import AsyncMock
+
+import pytest
 
 from oxygent.oxy.agents.chat_agent import ChatAgent
 from oxygent.schemas import OxyRequest, OxyResponse, OxyState
+
 
 # ────────────────────────────────────────────────────────────────────────────────
 # Dummy stubs used to patch Memory / Message inside chat_agent.py
@@ -22,12 +24,13 @@ class DummyMemory:
     def add_messages(self, msgs):
         self._messages.extend(msgs)
 
-    def to_dict_list(self):
+    def to_dict_list(self, short_memory_size=None):
         return self._messages
 
 
 class DummyMessage:
     """Return bare-bones dicts compatible with LLM Chat API"""
+
     @staticmethod
     def system_message(content):
         return {"role": "system", "content": content}
@@ -48,8 +51,12 @@ class DummyMessage:
 def chat_agent(monkeypatch):
     """Instantiate ChatAgent and patch dependencies"""
     # Patch Memory & Message inside module
-    monkeypatch.setattr("oxygent.oxy.agents.chat_agent.Memory", DummyMemory, raising=True)
-    monkeypatch.setattr("oxygent.oxy.agents.chat_agent.Message", DummyMessage, raising=True)
+    monkeypatch.setattr(
+        "oxygent.oxy.agents.chat_agent.Memory", DummyMemory, raising=True
+    )
+    monkeypatch.setattr(
+        "oxygent.oxy.agents.chat_agent.Message", DummyMessage, raising=True
+    )
 
     agent = ChatAgent(name="chat_agent", desc="UT Chat Agent", llm_model="mock_llm")
     agent._build_instruction = lambda args: "You are a helpful AI assistant."
@@ -67,8 +74,8 @@ def oxy_request(monkeypatch):
         caller="user",
         caller_category="user",
         current_trace_id="trace123",
-        short_memory = [{"role": "assistant", "content": "Prev answer"}],
-        query = "hello!"
+        short_memory=[{"role": "assistant", "content": "Prev answer"}],
+        query="hello!",
     )
     mocked_resp = OxyResponse(
         state=OxyState.COMPLETED,

@@ -8,12 +8,20 @@ consistent interface for different LLM providers.
 import copy
 import json
 import logging
+import os
 from typing import Optional
 
+import aiofiles
 from pydantic import Field
 
+from ...config import Config
 from ...schemas import OxyRequest, OxyResponse
-from ...utils.common_utils import extract_first_json, image_to_base64, video_to_base64
+from ...utils.common_utils import (
+    extract_first_json,
+    image_to_base64,
+    parse_mixed_string,
+    video_to_base64,
+)
 from ..base_oxy import Oxy
 
 logger = logging.getLogger(__name__)
@@ -40,11 +48,17 @@ class BaseLLM(Oxy):
     """
 
     category: str = Field("llm", description="")
-    timeout: float = Field(300, description="Timeout in seconds.")
+    semaphore: int = Field(
+        default_factory=Config.get_llm_semaphore, description="Concurrency limit"
+    )
+    timeout: float = Field(
+        default_factory=Config.get_llm_timeout, description="Timeout in seconds."
+    )
 
     llm_params: dict = Field(default_factory=dict)
     is_send_think: bool = Field(
-        default=True, description="Whether to send think messages to the frontend."
+        default_factory=Config.get_message_is_send_think,
+        description="Whether to send think messages to the frontend.",
     )
     friendly_error_text: Optional[str] = Field(
         default="Sorry, I seem to have encountered a problem. Please try again.",
@@ -66,36 +80,123 @@ class BaseLLM(Oxy):
         default=12 * 1024 * 1024,
         description="Maximum video file size in bytes (default: 12MB).",
     )
+    max_file_size_bytes: int = Field(
+        default=2 * 1024 * 1024,
+        description="Maximum non-media file size (bytes) for base64 embedding.",
+    )
+    base64_image_prefix: str = Field(default="data:image", description="")
+    base64_video_prefix: str = Field(default="data:video", description="")
+    is_disable_system_prompt: bool = Field(default=False)
 
     async def _get_messages(self, oxy_request: OxyRequest):
-        """Preprocess messages for multimoding input."""
-        if self.is_convert_url_to_base64:
-            messages_processed = copy.deepcopy(oxy_request.arguments["messages"])
-            for message in messages_processed:
-                if not isinstance(message["content"], list):
+        # merge system prompt
+        if (
+            self.is_disable_system_prompt
+            and oxy_request.arguments["messages"][0].get("role") == "system"
+        ):
+            oxy_request.arguments["messages"][1]["content"] = (
+                oxy_request.arguments["messages"][0]["content"]
+                + "\nUser Input: "
+                + oxy_request.arguments["messages"][1]["content"]
+            )
+            oxy_request.arguments["messages"] = oxy_request.arguments["messages"][1:]
+
+        # Preprocess messages for multimoding input
+        if not self.is_multimodal_supported:
+            return oxy_request.arguments["messages"]
+
+        messages_processed = copy.deepcopy(oxy_request.arguments["messages"])
+        messages_temp = []
+        for message in messages_processed:
+            role, content = message["role"], message["content"]
+            if role == "user":
+                # 如果不是str类型则不做处理
+                if not isinstance(content, str):
+                    messages_temp.append(message)
                     continue
-                for item in message["content"]:
-                    item_type = item["type"]
-                    if item_type == "text":
-                        continue
-                    elif item_type == "image_url":
-                        item[item_type]["url"] = await image_to_base64(
-                            item[item_type]["url"], self.max_image_pixels
-                        )
-                    elif item_type == "video_url":
-                        item[item_type]["url"] = await video_to_base64(
-                            item[item_type]["url"], self.max_video_size
-                        )
+                # 解析文本
+                items = parse_mixed_string(content)
+                # 读取文件替换成文本内容
+                index_of_doc_url = [
+                    i for i, item in enumerate(items) if item["type"] == "doc_url"
+                ]
+                for i in index_of_doc_url:
+                    item = items[i]
+                    item_link = item["link"]
+                    if os.path.exists(item_link):
+                        async with aiofiles.open(item_link, "r") as f:
+                            doc_content = await f.read()
+                            items[i] = {
+                                "type": "text",
+                                "content": f"The content of the `{item['desc']}` is: {doc_content} --- ",
+                            }
                     else:
-                        logger.warning(
-                            f"Unexpected content type: {item_type}",
-                            extra={
-                                "trace_id": oxy_request.current_trace_id,
-                                "node_id": oxy_request.node_id,
-                            },
-                        )
+                        items[i] = {"type": "text", "content": item["content"]}
+
+                # 判断是否是纯文本
+                is_pure_text = all([item["type"] == "text" for item in items])
+                # 直接拼接
+                if is_pure_text:
+                    content = "".join([item["content"] for item in items])
+                else:
+                    content = []
+                    for item in items:
+                        item_type = item["type"]
+                        if item_type == "text":
+                            content.append(
+                                {"type": item_type, item_type: item["content"]}
+                            )
+                        elif item_type in ["image_url", "video_url"]:
+                            content.append(
+                                {
+                                    "type": "text",
+                                    "text": f"The content of the `{item['desc']}` is: ",
+                                }
+                            )
+                            content.append(
+                                {"type": item_type, item_type: {"url": item["link"]}}
+                            )
+                        else:
+                            pass
+            messages_temp.append({"role": role, "content": content})
+        messages_processed = messages_temp
+
+        # hold url
+        if not self.is_convert_url_to_base64:
             return messages_processed
-        return oxy_request.arguments["messages"]
+
+        # convert url into base_64 data
+        for message in messages_processed:
+            if not isinstance(message.get("content"), list):
+                continue
+
+            for item in message["content"]:
+                item_type = item.get("type")
+                if item_type == "text":
+                    continue
+
+                if item_type == "image_url":
+                    item[item_type]["url"] = await image_to_base64(
+                        item[item_type]["url"],
+                        self.max_image_pixels,
+                        self.base64_image_prefix,
+                    )
+                elif item_type == "video_url":
+                    item[item_type]["url"] = await video_to_base64(
+                        item[item_type]["url"],
+                        self.max_video_size,
+                        self.base64_video_prefix,
+                    )
+                else:
+                    logger.warning(
+                        f"Unexpected content type: {item_type}",
+                        extra={
+                            "trace_id": oxy_request.current_trace_id,
+                            "node_id": oxy_request.node_id,
+                        },
+                    )
+
+        return messages_processed
 
     async def _execute(self, oxy_request: OxyRequest) -> OxyResponse:
         """Execute the LLM request."""
@@ -127,7 +228,9 @@ class BaseLLM(Oxy):
                     tool_call_dict = json.loads(extract_first_json(oxy_response.output))
                     if "think" in tool_call_dict:
                         msg = tool_call_dict["think"].strip()
-                await oxy_request.send_message({"type": "think", "content": msg})
+                await oxy_request.send_message(
+                    {"type": "think", "content": msg, "agent": oxy_request.caller}
+                )
             except json.JSONDecodeError:
                 pass
             except Exception as e:
